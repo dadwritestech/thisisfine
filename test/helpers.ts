@@ -1,6 +1,7 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { after } from "node:test";
 import type { LockRecord, ProposalRecord, RetireRecord } from "../src/types.ts";
 
@@ -30,3 +31,27 @@ export const retire = (over: Partial<RetireRecord> = {}): RetireRecord => ({
   retiredAt: "2026-10-05T10:00:00.000Z", words: "yes", promptId: "pr2", sessionId: "s1",
   transcriptPath: "", keyId: "k", sig: "0".repeat(64), ...over
 });
+
+export function sh(cwd: string, cmd: string, args: string[]): string {
+  return execFileSync(cmd, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+}
+
+/** A git repo with a local identity and LF-only checkouts. */
+export function initRepo(dir: string): string {
+  sh(dir, "git", ["init", "-q", "-b", "main"]);
+  sh(dir, "git", ["config", "user.name", "test"]);
+  sh(dir, "git", ["config", "user.email", "test@example.com"]);
+  sh(dir, "git", ["config", "core.autocrlf", "false"]);
+  return dir;
+}
+
+export function put(root: string, rel: string, content: string): void {
+  mkdirSync(dirname(join(root, rel)), { recursive: true });
+  writeFileSync(join(root, rel), content);
+}
+
+export function commitAll(root: string, msg: string): string {
+  sh(root, "git", ["add", "-A"]);
+  sh(root, "git", ["commit", "-q", "-m", msg]);
+  return sh(root, "git", ["rev-parse", "HEAD"]);
+}
