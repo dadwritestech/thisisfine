@@ -164,7 +164,8 @@ export function statusText(records: LedgerRecord[]): string {
   const rows = all.map((p) => {
     const label = p.status === "retired" ? "retired" : p.proof?.proven ? "✅ proven" : "🟡 unproven";
     const when = p.status === "retired" && p.retire ? `retired ${shortDate(p.retire.retiredAt)}` : `locked ${shortDate(p.lock.confirmedAt)} ("${p.lock.words.trim()}")`;
-    return `  ${pad(`#${p.number}`, 5)}${pad(label, 13)}${pad(p.sentence, 44)}${when}`;
+    // two lines, so a long sentence never pushes the date out of line
+    return `  ${pad(`#${p.number}`, 5)}${pad(label, 13)}"${p.sentence}"\n  ${" ".repeat(18)}${when}`;
   });
   const pend = pending.map((p) => `  pending #${p.number} "${p.action === "retire" ? `retire: ${p.reason}` : p.sentence}" (reply y to confirm)`);
   return [head, "", ...rows, ...pend].join("\n");

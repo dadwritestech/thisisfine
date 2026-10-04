@@ -1,0 +1,8 @@
+body { font-family: system-ui, sans-serif; margin: 0; background: #fff8ef; color: #2b1d12; }
+header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; background: #2b1d12; color: #fff8ef; }
+header h1 { margin: 0; font-size: 1.25rem; }
+#cart-link { color: #ffb347; font-weight: 600; }
+[data-testid="cart-count"] { display: inline-block; min-width: 1.4em; margin-left: .3em; padding: 0 .3em; border-radius: 1em; background: #ff6a00; color: #fff; text-align: center; }
+main { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1.5rem; padding: 2rem; }
+article { background: #fff; border-radius: .75rem; padding: 1.25rem; box-shadow: 0 1px 3px #0002; }
+button { background: #ff6a00; color: #fff; border: 0; border-radius: .5rem; padding: .5rem 1rem; font-weight: 600; cursor: pointer; }

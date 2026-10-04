@@ -1,0 +1,8 @@
+{
+  "name": "fine-coffee-co",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}

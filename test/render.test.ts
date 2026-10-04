@@ -54,7 +54,7 @@ test("status text lists active, retired and pending", () => {
     proposal({ id: "p3", action: "retire", number: 2, reason: "x" }), retire({ proposal: "p3", number: 2 }),
     proposal({ id: "p4", number: 3, sentence: "Logo links home" })];
   const text = statusText(recs);
-  assert.match(text, /#1 +✅ proven +Badge shows the cart count/);
-  assert.match(text, /#2 +retired +Empty cart disables checkout/);
+  assert.match(text, /#1 +✅ proven +"Badge shows the cart count"\n +locked Oct 4 \("y"\)/);
+  assert.match(text, /#2 +retired +"Empty cart disables checkout"\n +retired Oct 5/);
   assert.match(text, /pending #3 "Logo links home"/);
 });
