@@ -4,14 +4,15 @@ import { classifyPrompt, isAffirmative, isApproval } from "../src/affirm.ts";
 
 test("short, whole-prompt yeses are affirmative", () => {
   for (const p of ["y", "Y", "yes", "Yes!", "yep", "ok", "OK.", "okay", "sure", "lock it", "lock it in", "Yes, lock it.",
-    "do it", "go ahead", "yes please", "👍", "✅", " y \n", "ja", "haan", "avunu"]) {
+    "do it", "go ahead", "yes please", "👍", "✅", " y \n", "ja", "haan", "avunu",
+    "y, perfect", "yes thanks", "ok great", "yes lgtm"]) {
     assert.equal(isAffirmative(p), true, p);
   }
 });
 
 test("anything with conditions, questions, or negation is not", () => {
   for (const p of ["y?", "yes but change the colour", "no", "n", "not yet", "ok so what does it check?", "yes and also fix the footer",
-    "", "it", "please", "lock it? not sure", "yes no", "don't"]) {
+    "", "it", "please", "lock it? not sure", "yes no", "don't", "perfect", "great thanks"]) {
     assert.equal(isAffirmative(p), false, p);
   }
 });

@@ -10,7 +10,10 @@ const YES_HEADS = new Set([
   // a few non-English yeses; a bilingual "haan" is still a yes
   "ja", "si", "sí", "oui", "haan", "ha", "avunu"
 ]);
-const YES_FILLERS = new Set(["it", "in", "them", "all", "both", "please", "ahead", "that", "this", "one", "now"]);
+// Praise rides along with a yes ("y, perfect") but is never a yes on its own:
+// "perfect" alone could be about the last change, not the question asked.
+const YES_FILLERS = new Set(["it", "in", "them", "all", "both", "please", "ahead", "that", "this", "one", "now",
+  "perfect", "great", "good", "nice", "cool", "awesome", "exactly", "lgtm", "thanks", "thank", "you", "thx"]);
 
 function tokens(prompt: string): string[] {
   return prompt
