@@ -169,3 +169,16 @@ export function statusText(records: LedgerRecord[]): string {
   const pend = pending.map((p) => `  pending #${p.number} "${p.action === "retire" ? `retire: ${p.reason}` : p.sentence}" (reply y to confirm)`);
   return [head, "", ...rows, ...pend].join("\n");
 }
+
+const ASK_TO_RETIRE = `To change it, ask the human to retire the promise (thisisfine retire <n> --reason "...") and let them answer.`;
+
+export const guardText = {
+  ledger: `thisisfine: .thisisfine/promises.jsonl is written only by thisisfine, after the human says yes. Use "thisisfine status" to read it.`,
+  hooks: `thisisfine: hook commands run only from Claude Code's own hooks, because only the human can answer a proposal.`,
+  home: `thisisfine: the signing key and the confirmed copies of every promise live there. They are not for the agent to read or change.`,
+  check: (number: number, sentence: string) =>
+    `thisisfine: this check is promise #${number} "${sentence}", which the human locked. Fix the app, not the check. ${ASK_TO_RETIRE}`,
+  config: (rel: string) =>
+    `thisisfine: ${rel} decides how locked promises are checked, so it is frozen once a promise is locked. If it really needs to change, ask the human to edit it.`,
+  stateDir: `thisisfine: this command would write inside .thisisfine/ where locked promises live. Write new checks with the Write tool instead; to change a locked promise, ask the human to retire it.`
+};
