@@ -97,7 +97,7 @@ test("status lists promises", () => {
   const r = run(["status"], { cwd: join(root, ".thisisfine"), home });
   assert.equal(r.code, 0, r.stderr);
   assert.match(r.stdout, /1 active promise/);
-  assert.match(r.stdout, /#1\s+🟡 unproven\s+Badge shows the cart count/);
+  assert.match(r.stdout, /#1\s+🟡 unproven\s+"Badge shows the cart count"/);
 });
 
 test("retire asks the human; an unknown number is a usage error", () => {
