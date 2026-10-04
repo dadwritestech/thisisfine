@@ -82,7 +82,6 @@ export default defineConfig({
 
 const GITIGNORE = `runs/
 node_modules/
-state.json
 `;
 
 /**

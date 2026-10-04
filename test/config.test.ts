@@ -28,7 +28,7 @@ test("writeScaffold creates the committed files and pins Playwright", () => {
   const dir = join(root, ".thisisfine");
   assert.deepEqual(JSON.parse(readFileSync(join(dir, "config.json"), "utf8")).start, "npm start");
   assert.equal(JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).devDependencies["@playwright/test"], "1.61.0");
-  assert.match(readFileSync(join(dir, ".gitignore"), "utf8"), /runs\/[\s\S]*node_modules\/[\s\S]*state\.json/);
+  assert.equal(readFileSync(join(dir, ".gitignore"), "utf8"), "runs/\nnode_modules/\n", "state lives in the home dir, not here");
   assert.match(readFileSync(join(dir, "playwright.config.mjs"), "utf8"), /THISISFINE_BASE_URL/);
   assert.ok(existsSync(join(dir, "checks")));
 });

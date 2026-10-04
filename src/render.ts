@@ -82,9 +82,28 @@ export function integrityForAgent(problems: string[]): string {
     "🔥 This is NOT fine. The promise ledger no longer matches what the human confirmed:",
     ...problems.map((p) => `   - ${p}`),
     "",
-    "Restore the original files (git checkout -- .thisisfine/promises.jsonl .thisisfine/checks) rather than editing them.",
+    "Run \"thisisfine restore\" to put back exactly what the human confirmed (it rewrites the records and locked checks from its own copy). Don't edit them by hand.",
     "Only the human can change a promise: propose a replacement (thisisfine propose --replaces <n>) or a retirement, and let them answer."
   ].join("\n");
+}
+
+/** When the app can't even be checked: the agent has to fix that first. */
+export function uncheckableForAgent(error: string): string {
+  return [
+    "🔥 This is NOT fine. thisisfine couldn't check the promises, so it can't let you stop:",
+    indent(error, "   "),
+    "",
+    "Get the app starting again (the start command lives in .thisisfine/config.json; ask the human before changing it)."
+  ].join("\n");
+}
+
+export function uncheckableForHuman(error: string): string {
+  return `🔥 This is NOT fine. Couldn't check the promises: ${error.trim().split("\n")[0]}. Sent Claude back to fix it.`;
+}
+
+/** Same block, different cause than a broken promise (integrity, app won't start). */
+export function stuckMessage(what: string, tries: number): string {
+  return `🔥 thisisfine blocked ${tries} stops in a row (${what}), so I let Claude stop. Your call: run "thisisfine verify" to see what's wrong.`;
 }
 
 export function integrityForHuman(problems: string[]): string {
