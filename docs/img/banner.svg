@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-label="thisisfine: a coffee mug with a padlock on it, calm, while small flames flicker along the bottom edge">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b1d12"/>
+      <stop offset="1" stop-color="#3d2716"/>
+    </linearGradient>
+    <linearGradient id="flame" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#ff4d00"/>
+      <stop offset="0.6" stop-color="#ff9a1f"/>
+      <stop offset="1" stop-color="#ffd166"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="360" fill="url(#bg)"/>
+
+  <!-- flames along the bottom edge: the app, on fire -->
+  <g fill="url(#flame)" opacity="0.9">
+    <path d="M40 360 C30 320 60 300 55 270 C80 300 95 320 80 360 Z"/>
+    <path d="M120 360 C105 330 130 315 128 292 C150 318 160 335 150 360 Z"/>
+    <path d="M980 360 C970 325 995 305 990 275 C1018 305 1030 330 1015 360 Z"/>
+    <path d="M1060 360 C1045 320 1080 300 1072 262 C1105 298 1118 330 1100 360 Z"/>
+    <path d="M1140 360 C1130 335 1150 318 1146 298 C1168 320 1175 340 1165 360 Z"/>
+  </g>
+
+  <!-- the mug: steam, body, handle -->
+  <g transform="translate(150 70)">
+    <g fill="none" stroke="#fff8ef" stroke-width="7" stroke-linecap="round" opacity="0.55">
+      <path d="M70 40 C55 22 85 12 70 -8"/>
+      <path d="M110 40 C95 22 125 12 110 -8"/>
+      <path d="M150 40 C135 22 165 12 150 -8"/>
+    </g>
+    <path d="M30 60 H190 V170 C190 205 160 230 125 230 H95 C60 230 30 205 30 170 Z" fill="#fff8ef"/>
+    <path d="M190 85 H215 C245 85 255 115 245 140 C238 158 220 165 190 165" fill="none" stroke="#fff8ef" stroke-width="16"/>
+    <rect x="30" y="60" width="160" height="16" fill="#e8dccb"/>
+    <!-- the padlock on the mug: the promise -->
+    <g transform="translate(110 150)">
+      <path d="M-20 -12 V-30 C-20 -45 20 -45 20 -30 V-12" fill="none" stroke="#2b1d12" stroke-width="8"/>
+      <rect x="-30" y="-14" width="60" height="48" rx="8" fill="#ff6a00"/>
+      <circle cx="0" cy="6" r="7" fill="#2b1d12"/>
+      <rect x="-3" y="8" width="6" height="14" fill="#2b1d12"/>
+    </g>
+  </g>
+
+  <!-- wordmark -->
+  <text x="470" y="185" font-family="ui-rounded, 'SF Pro Rounded', 'Segoe UI', system-ui, sans-serif" font-size="104" font-weight="800" fill="#fff8ef" letter-spacing="-2">this<tspan fill="#ffb347">is</tspan>fine</text>
+  <text x="474" y="240" font-family="'Segoe UI', system-ui, sans-serif" font-size="30" fill="#e8dccb">Promises your coding agent can't quietly break.</text>
+</svg>

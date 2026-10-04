@@ -38,11 +38,13 @@ test("a shop, a badge, a yes, a refactor: thisisfine catches it", { skip: proces
   if (OUT) mkdirSync(OUT, { recursive: true });
 
   function run(step: string, args: string[], stdin?: unknown) {
+    const started = performance.now();
     const r = spawnSync(process.execPath, [BIN, ...args], {
       cwd: root, encoding: "utf8", input: stdin === undefined ? "" : JSON.stringify(stdin),
       env: { ...process.env, THISISFINE_HOME: home }, timeout: 300_000
     });
-    if (OUT) writeFileSync(join(OUT, `${step}.txt`), `$ thisisfine ${args.join(" ")}\n[exit ${r.status}]\n${r.stdout}${r.stderr ? `\n[stderr]\n${r.stderr}` : ""}`);
+    const secs = ((performance.now() - started) / 1000).toFixed(1);
+    if (OUT) writeFileSync(join(OUT, `${step}.txt`), `$ thisisfine ${args.join(" ")}\n[exit ${r.status}, ${secs}s]\n${r.stdout}${r.stderr ? `\n[stderr]\n${r.stderr}` : ""}`);
     return { code: r.status, stdout: r.stdout, stderr: r.stderr, json: () => JSON.parse(r.stdout || "{}") as Record<string, any> };
   }
   const hook = (step: string, name: string, extra: Record<string, unknown> = {}) =>
