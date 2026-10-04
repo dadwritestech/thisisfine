@@ -1,0 +1,3 @@
+# Check files are hashed into signed locks. Hashes normalise CRLF anyway, but
+# keep checkouts LF so diffs and signatures agree across machines.
+* text=auto eol=lf

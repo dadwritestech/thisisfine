@@ -1,0 +1,55 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { appendRecord, ledgerPath, readLedger } from "../src/ledger.ts";
+import type { DismissRecord } from "../src/types.ts";
+import { lock, proposal, tempDir } from "./helpers.ts";
+
+test("missing ledger reads as empty", () => {
+  assert.deepEqual(readLedger(ledgerPath(tempDir())), []);
+});
+
+test("append then read round-trips", () => {
+  const path = ledgerPath(tempDir());
+  const d: DismissRecord = { kind: "dismiss", proposal: "p1", words: "no", at: "2026-10-04T10:01:00.000Z" };
+  appendRecord(path, proposal());
+  appendRecord(path, d);
+  assert.deepEqual(readLedger(path), [proposal(), d]);
+});
+
+test("malformed line is reported with its line number", () => {
+  const root = tempDir();
+  const path = ledgerPath(root);
+  appendRecord(path, proposal());
+  appendFileSync(path, "{not json\n");
+  assert.throws(() => readLedger(path), /line 2/);
+});
+
+test("unknown kind is rejected", () => {
+  const path = ledgerPath(tempDir());
+  mkdirSync(join(path, ".."), { recursive: true });
+  appendFileSync(path, JSON.stringify({ kind: "approved", number: 1 }) + "\n");
+  assert.throws(() => readLedger(path), /kind/);
+});
+
+test("lock without a signature is rejected", () => {
+  const path = ledgerPath(tempDir());
+  const { sig: _s, ...unsigned } = lock();
+  mkdirSync(join(path, ".."), { recursive: true });
+  appendFileSync(path, JSON.stringify(unsigned) + "\n");
+  assert.throws(() => readLedger(path), /sig/);
+});
+
+test("check path escaping the project is rejected", () => {
+  const path = ledgerPath(tempDir());
+  appendRecord(path, proposal({ check: "../../etc/passwd" }));
+  assert.throws(() => readLedger(path), /check/);
+});
+
+test("blank lines are tolerated", () => {
+  const path = ledgerPath(tempDir());
+  appendRecord(path, proposal());
+  appendFileSync(path, "\n\n");
+  assert.equal(readLedger(path).length, 1);
+});

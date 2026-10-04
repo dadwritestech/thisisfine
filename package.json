@@ -1,0 +1,20 @@
+{
+  "name": "thisisfine",
+  "version": "0.1.0",
+  "description": "Your agent says done while your app is on fire. thisisfine locks every behaviour you said yes to into a proven browser check, and won't let the agent finish a turn that breaks one.",
+  "type": "module",
+  "license": "MIT",
+  "author": "dadwritestech",
+  "bin": { "thisisfine": "./bin/thisisfine.mjs" },
+  "engines": { "node": ">=22.18" },
+  "files": ["bin", "src", "hooks", "commands", "skills", ".claude-plugin", "examples"],
+  "keywords": ["claude-code", "plugin", "playwright", "regression", "ai-agents", "testing"],
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.7.0"
+  }
+}
