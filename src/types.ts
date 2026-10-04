@@ -103,6 +103,18 @@ export interface Config {
   copy: string[];
 }
 
+/**
+ * One check's result from one Playwright run. `flaky` = failed, then passed
+ * on retry: reported, never blocking. `missing` = no result for that file
+ * (deleted, or a syntax error that stopped Playwright collecting it).
+ */
+export interface CheckOutcome {
+  check: string;
+  status: "passed" | "failed" | "flaky" | "missing";
+  message: string;
+  screenshot: string | null;
+}
+
 /** Local, uncommitted bookkeeping. Losing it only costs speed and nudges. */
 export interface State {
   lastGreenTree: string | null;
