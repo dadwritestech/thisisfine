@@ -1,0 +1,18 @@
+{
+  "name": "thisisfine",
+  "description": "thisisfine: promises your coding agent can't quietly break",
+  "owner": {
+    "name": "dadwritestech"
+  },
+  "plugins": [
+    {
+      "name": "thisisfine",
+      "description": "Promises your coding agent can't quietly break. Say \"y\" to a behaviour and it becomes a locked browser check that runs before Claude can finish.",
+      "version": "0.1.0",
+      "source": "./",
+      "author": {
+        "name": "dadwritestech"
+      }
+    }
+  ]
+}
