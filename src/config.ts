@@ -74,7 +74,7 @@ export default defineConfig({
   use: {
     baseURL: env.THISISFINE_BASE_URL,
     browserName: "chromium",
-    screenshot: "only-on-failure",
+    screenshot: env.THISISFINE_SCREENSHOT === "on" ? "on" : "only-on-failure",
     trace: "off"
   }
 });
