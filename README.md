@@ -146,6 +146,7 @@ thisisfine can't stop an agent that is determined to cheat. It makes cheating lo
 - **Signatures are per machine.** The key never leaves your home directory, so a teammate's machine can read your promises and run them, but can't verify your signatures. Cross-machine verification is future work.
 - **Claude Code and web apps only, for now.** Other agents (Codex, Cursor, pi) and non-browser checks are out of scope for v0.
 - **It's only as good as the check.** A promise proves the check can fail when the behaviour is gone. It doesn't prove the check covers everything you had in mind. That's why the sentence is short, and why a person has to say yes.
+- **Your app runs in your folder.** If a check clicks Save, it really saves, before every stop. `propose` names any project file the app wrote while the check ran, so you can point `start` at a scratch copy before you say yes. (We learned this the hard way: on a real app, a theme check rewrote `config.json`, and that saved setting later made the check pass with the feature broken.)
 - **Not on npm yet.** Install it as a Claude Code plugin. A standalone `npx thisisfine` needs a build step that doesn't exist yet.
 
 ## FAQ
