@@ -146,6 +146,25 @@ test("hook-stop with no locked promises lets the agent stop and shows pending qu
   assert.match(r.json().systemMessage, /Lock in promise #1/);
 });
 
+test("init on an app it can't recognise says so instead of claiming it's ready", () => {
+  const root = tempDir();
+  put(root, "server.py", "print('hi')\n");
+  const home = join(root, "home");
+  const r = run(["init", "--no-install"], { cwd: root, home });
+  assert.equal(r.code, 0, r.stderr);
+  assert.doesNotMatch(r.stdout, /Ready/);
+  assert.doesNotMatch(r.stdout, /npm start/, "no made-up start command presented as the answer");
+  assert.match(r.stdout, /Not ready yet: set "start" in \.thisisfine\/config\.json/);
+  assert.match(r.stdout, /\{port\}/);
+
+  // once the human has set it, init is happy
+  const cfgPath = join(root, ".thisisfine/config.json");
+  writeFileSync(cfgPath, readFileSync(cfgPath, "utf8").replace('"npm start"', '"python server.py --port {port}"'));
+  const again = run(["init", "--no-install"], { cwd: root, home });
+  assert.match(again.stdout, /Start command: python server\.py --port \{port\}/);
+  assert.match(again.stdout, /Ready/);
+});
+
 test("init writes the scaffold and reports what it detected", () => {
   const root = tempDir();
   put(root, "package.json", JSON.stringify({ scripts: { start: "node server.js" } }));

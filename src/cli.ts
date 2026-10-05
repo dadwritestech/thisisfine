@@ -135,23 +135,32 @@ function positiveInt(raw: string | undefined, what: string): number {
 
 function cmdInit(install: boolean): number {
   const root = repoRoot(process.cwd()) ?? resolve(process.cwd());
-  const { config, detected } = detectConfig(root);
+  const { config, detected, known } = detectConfig(root);
   const written = writeScaffold(root, config);
   const current = loadConfig(root);
+  // a start command the human already edited counts as known, whatever the project looks like
+  const guessing = !known && current.start === config.start;
   out(`thisisfine init in ${root}`);
-  out(`  App: ${detected}`);
-  out(`  Start command: ${current.start}   (edit ${STATE_DIR}/config.json if that's wrong)`);
+  if (!guessing) {
+    if (known) out(`  App: ${detected}`);
+    out(`  Start command: ${current.start}   (edit ${STATE_DIR}/config.json if that's wrong)`);
+  }
   if (written.length) out(`  Wrote: ${written.join(", ")}`);
   if (!repoRoot(root)) out(`  ⚠ Not a git repository. Proofs compare against an earlier commit, so run "git init" and commit first.`);
   if (install) {
-    out(`  Installing @playwright/test ${PLAYWRIGHT_VERSION} into ${STATE_DIR}/ (your own package.json is untouched)...`);
+    out(`  Installing @playwright/test ${PLAYWRIGHT_VERSION} into ${STATE_DIR}/ (nothing outside it is touched)...`);
     const dir = join(root, STATE_DIR);
     const npm = spawnSync("npm install --no-audit --no-fund --loglevel=error", { cwd: dir, shell: true, stdio: "inherit" });
     if (npm.status !== 0) throw new Error(`npm install failed in ${dir}`);
     const browsers = spawnSync(process.execPath, [join(dir, "node_modules", "@playwright", "test", "cli.js"), "install", "chromium"], { cwd: dir, stdio: "inherit" });
     if (browsers.status !== 0) throw new Error("Playwright couldn't install Chromium");
   }
-  out(`  Ready. Commit ${STATE_DIR}/ so promises travel with the code.`);
+  if (guessing) {
+    out(`  Not ready yet: set "start" in ${STATE_DIR}/config.json to the command that runs your app on {port},`);
+    out(`  e.g. "python app.py --port {port}". thisisfine fills in a free port and also sets PORT.`);
+  } else {
+    out(`  Ready. Commit ${STATE_DIR}/ so promises travel with the code.`);
+  }
   return 0;
 }
 

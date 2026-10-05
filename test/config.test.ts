@@ -19,6 +19,8 @@ test("detects Next, Vite, dev and start scripts", () => {
   const none = detectConfig(tempDir());
   assert.equal(none.config.start, "npm start");
   assert.match(none.detected, /edit/i);
+  assert.equal(none.known, false);
+  assert.equal(detectConfig(project({ scripts: { start: "node server.js" } })).known, true);
 });
 
 test("writeScaffold creates the committed files and pins Playwright", () => {

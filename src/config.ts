@@ -27,7 +27,7 @@ interface PackageJson {
  * proof can't survive. `detected` is printed by `init` so the guess is never
  * silent.
  */
-export function detectConfig(root: string): { config: Config; detected: string } {
+export function detectConfig(root: string): { config: Config; detected: string; known: boolean } {
   let pkg: PackageJson = {};
   try {
     pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as PackageJson;
@@ -36,12 +36,12 @@ export function detectConfig(root: string): { config: Config; detected: string }
   }
   const deps = { ...pkg.dependencies, ...pkg.devDependencies };
   const scripts = pkg.scripts ?? {};
-  const pick = (start: string, detected: string) => ({ config: { start, ...DEFAULTS }, detected });
+  const pick = (start: string, detected: string, known = true) => ({ config: { start, ...DEFAULTS }, detected, known });
   if (deps.next) return pick("npx next dev -p {port}", "Next.js");
   if (deps.vite) return pick("npx vite --port {port} --strictPort", "Vite");
   if (scripts.dev) return pick("npm run dev", 'the "dev" script (PORT is set; make sure the app reads it)');
   if (scripts.start) return pick("npm start", 'the "start" script (PORT is set; make sure the app reads it)');
-  return pick("npm start", `nothing recognisable: edit "start" in ${STATE_DIR}/config.json`);
+  return pick("npm start", `nothing recognisable: edit "start" in ${STATE_DIR}/config.json`, false);
 }
 
 export function loadConfig(root: string): Config {
