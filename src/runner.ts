@@ -38,6 +38,20 @@ function toCheck(file: string): string {
   return CHECKS_PREFIX + file.replace(/\\/g, "/");
 }
 
+/**
+ * On a timeout Playwright reports a bare "Test timeout of 30000ms exceeded."
+ * first and the step that hung (with its call log, e.g. "<div> intercepts
+ * pointer events") second. Keep every message, minus any that a more
+ * detailed one already contains.
+ */
+function failureMessage(r: { error?: { message?: string }; errors?: { message?: string }[] }): string {
+  const all = [...(r.errors ?? []), ...(r.error ? [r.error] : [])]
+    .map((e) => (e.message ?? "").replace(ANSI, "").trim())
+    .filter(Boolean);
+  const unique = [...new Set(all)];
+  return unique.filter((m) => !unique.some((o) => o !== m && o.includes(m))).join("\n\n");
+}
+
 function collect(suite: PwSuite, root: string, into: Map<string, FileTally>): void {
   for (const spec of suite.specs ?? []) {
     if (!suite.file) continue;
@@ -48,8 +62,7 @@ function collect(suite: PwSuite, root: string, into: Map<string, FileTally>): vo
       if (t.status !== "unexpected" || tally.message) continue;
       const failed = (t.results ?? []).find((r) => r.status !== "passed" && r.status !== "skipped");
       if (!failed) continue;
-      const msg = failed.error?.message ?? failed.errors?.[0]?.message ?? `test ${failed.status}`;
-      tally.message = msg.replace(ANSI, "").trim();
+      tally.message = failureMessage(failed) || `test ${failed.status}`;
       const shot = (failed.attachments ?? []).find((a) => a.name === "screenshot" && a.path);
       if (shot?.path) tally.screenshot = relative(root, shot.path).replace(/\\/g, "/");
     }

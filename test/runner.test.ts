@@ -37,3 +37,17 @@ test("parseReport maps every requested check to one outcome", () => {
   assert.match(out[3].message, /SyntaxError/);
   assert.match(out[4].message, /skipped/);
 });
+
+test("a timeout reports the step that hung, not just that time ran out", () => {
+  const bare = "\u001b[31mTest timeout of 30000ms exceeded.\u001b[39m";
+  const step = "Error: locator.click: Test timeout of 30000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: 'Theme' })\n  - <div id=\"wizard\" class=\"wizard-overlay\">…</div> intercepts pointer events";
+  const timedOut = {
+    suites: [{ title: "1-theme.spec.ts", file: "1-theme.spec.ts", suites: [],
+      specs: [spec("Theme survives a reload", "unexpected", [result("timedOut", { error: { message: bare }, errors: [{ message: bare }, { message: step }] })])] }]
+  };
+  const [out] = parseReport(timedOut, root, [".thisisfine/checks/1-theme.spec.ts"]);
+  assert.equal(out!.status, "failed");
+  assert.match(out!.message, /locator\.click/);
+  assert.match(out!.message, /intercepts pointer events/);
+  assert.equal(out!.message.match(/Test timeout/g)?.length, 1, "the bare timeout line is not repeated");
+});
