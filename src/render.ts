@@ -29,7 +29,7 @@ export function sideEffectWarning(files: string[]): string {
   return [
     `⚠ While the check ran, the app wrote to: ${files.join(", ")}`,
     `  The gate re-runs this check before every Stop, so it will write there every time. If that is real data,`,
-    `  make the start command run the app on a scratch copy (.thisisfine/config.json), then propose again.`
+    `  ask the human to change "start" in .thisisfine/config.json so the app uses a scratch copy, then propose again.`
   ].join("\n");
 }
 
