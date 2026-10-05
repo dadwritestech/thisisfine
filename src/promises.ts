@@ -45,11 +45,13 @@ export function activePromises(records: LedgerRecord[]): PromiseState[] {
 export function pendingProposals(records: LedgerRecord[]): ProposalRecord[] {
   const answered = new Set<string>();
   for (const r of records) if (r.kind !== "proposal") answered.add(r.proposal);
+  // the newest proposal per number wins, answered or not: an answered one
+  // must not let the older proposal it superseded come back
   const latest = new Map<string, ProposalRecord>();
   for (const r of records) {
-    if (r.kind === "proposal" && !answered.has(r.id)) latest.set(`${r.action}:${r.number}`, r);
+    if (r.kind === "proposal") latest.set(`${r.action}:${r.number}`, r);
   }
-  return [...latest.values()].sort((a, b) => a.number - b.number);
+  return [...latest.values()].filter((p) => !answered.has(p.id)).sort((a, b) => a.number - b.number);
 }
 
 export function nextNumber(records: LedgerRecord[]): number {

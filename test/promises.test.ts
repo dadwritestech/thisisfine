@@ -41,6 +41,13 @@ test("a newer unanswered proposal for the same number supersedes the older one",
   assert.deepEqual(pendingProposals(recs).map((p) => p.id), ["p1b"]);
 });
 
+test("once the newer proposal is answered, the one it superseded does not come back", () => {
+  // found on LlamaForge: propose, fix the start command, propose again, y. The stale first
+  // proof then sat in "pending", one more y away from replacing the promise just locked.
+  const recs = [proposal(), proposal({ id: "p1b" }), lock({ proposal: "p1b" })];
+  assert.deepEqual(pendingProposals(recs), []);
+});
+
 test("nextNumber counts pending proposals and locks", () => {
   assert.equal(nextNumber([]), 1);
   assert.equal(nextNumber([proposal()]), 2);
