@@ -66,6 +66,8 @@ export function brokenForAgent(broken: Broken[]): string {
   const parts = broken.map(({ promise: p, outcome: o }) => {
     const lines = [`🔥 This is NOT fine. You broke promise #${p.number} "${p.sentence}".`,
       `   The human confirmed it ${quoteHuman(p)}`, `   Check: ${p.check}`];
+    // before the failure: Playwright's call log can fill the whole indent cap
+    if (o.pageErrors?.length) lines.push("   The page threw while loading:", indent(o.pageErrors.slice(0, 5).join("\n"), "     "));
     if (o.status === "missing") lines.push("   The check produced no result (deleted, renamed, or it no longer compiles).");
     else if (o.message) lines.push("   Failure:", indent(o.message, "     "));
     if (o.screenshot) lines.push(`   Screenshot: ${o.screenshot}`);

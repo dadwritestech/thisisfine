@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { CheckOutcome } from "./types.ts";
 import { STATE_DIR } from "./types.ts";
 
@@ -102,6 +103,26 @@ export function parseReport(report: unknown, root: string, checks: string[]): Ch
     if (t.statuses.includes("flaky")) return { check, status: "flaky", message: "", screenshot: null };
     return { check, status: "passed", message: "", screenshot: t.screenshot };
   });
+}
+
+/**
+ * What the page throws while loading, e.g. "SyntaxError: … (/app.js:12:5)".
+ * Asked only after a check failed: a script that dies on load shows up in
+ * the check as nothing more than `Received: "light"`. Best effort, never
+ * throws: no errors found and no probe possible both read as [].
+ */
+export async function pageErrors(root: string, baseUrl: string): Promise<string[]> {
+  const playwright = join(root, STATE_DIR, "node_modules", "@playwright", "test", "index.mjs");
+  if (!existsSync(playwright)) return [];
+  const probe = join(import.meta.dirname, "page-probe.mjs");
+  const stdout = await new Promise<string>((resolve) => {
+    execFile(process.execPath, [probe, pathToFileURL(playwright).href, baseUrl], { timeout: 45_000, windowsHide: true },
+      (_err, out) => resolve(out ?? ""));
+  });
+  const errors = stdout.split("\n").flatMap((line) => {
+    try { return [String(JSON.parse(line))]; } catch { return []; }
+  });
+  return [...new Set(errors)];
 }
 
 export interface RunOptions {

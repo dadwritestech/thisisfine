@@ -113,6 +113,8 @@ export interface CheckOutcome {
   status: "passed" | "failed" | "flaky" | "missing";
   message: string;
   screenshot: string | null;
+  /** What the page threw while loading; only looked up when a check failed. */
+  pageErrors?: string[];
 }
 
 /** Local, uncommitted bookkeeping. Losing it only costs speed and nudges. */

@@ -43,6 +43,17 @@ test("broken text quotes the human, the date, the failure and the screenshot", (
   assert.match(brokenForHuman([{ promise: p, outcome }]), /#1 "Badge shows the cart count"/);
 });
 
+test("a page that throws on load says so before the assertion, so the long call log can't push it out", () => {
+  const p = foldPromises([proposal(), lock()]).get(1)!;
+  const callLog = Array.from({ length: 40 }, (_, i) => `  - call log line ${i}`).join("\n");
+  const outcome = { check: p.check, status: "failed" as const, message: `Expected: "dark"\nReceived: "light"\n${callLog}`, screenshot: null,
+    pageErrors: ["SyntaxError: Invalid left-hand side in assignment (http://127.0.0.1:5000/web/js/ui.js:89)"] };
+  const agent = brokenForAgent([{ promise: p, outcome }]);
+  assert.match(agent, /The page threw while loading:\n +SyntaxError: Invalid left-hand side in assignment \(.*ui\.js:89\)/);
+  assert.ok(agent.indexOf("SyntaxError") < agent.indexOf("Received"), "page error first");
+  assert.doesNotMatch(brokenForAgent([{ promise: p, outcome: { ...outcome, pageErrors: [] } }]), /page threw/);
+});
+
 test("fine message counts kept promises and flags flaky ones", () => {
   assert.equal(fineMessage(14, []), "☕ This is fine. 14/14 promises kept.");
   assert.equal(fineMessage(3, [2]), "☕ This is fine. 3/3 promises kept (#2 was flaky: passed on retry).");

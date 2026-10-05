@@ -116,7 +116,15 @@ test("a shop, a badge, a yes, a refactor: thisisfine catches it", { skip: proces
   assert.match(b.reason, /#1/);
   assert.ok(b.reason.includes(words), "quotes the human's own words");
   assert.match(b.reason, /Expected[\s\S]*"2"[\s\S]*Received[\s\S]*"1"/);
+  assert.doesNotMatch(b.reason, /page threw/, "a wrong number is not a crash");
   keep(b.reason, "badge-broken.png");
+
+  // 8b. A typo that kills the whole script: the gate names the error and the line, not just "Received: 0".
+  edit("public/app.js", "String(new Set(cart).size)", "String(new Set(cart).size");
+  const crashed = hook("06b-hook-stop-crashed", "hook-stop");
+  assert.equal(crashed.json().decision, "block", crashed.stdout);
+  assert.match(crashed.json().reason, /The page threw while loading:\n +SyntaxError[^\n]*app\.js:\d+/, crashed.stdout);
+  edit("public/app.js", "String(new Set(cart).size", "String(new Set(cart).size)");
 
   // 9. Claude fixes the app (not the check), and the turn can end.
   edit("public/app.js", "String(new Set(cart).size)", "String(cart.length)");
