@@ -13,10 +13,14 @@ export function playwrightCli(root: string): string {
 
 const ANSI = /\u001b\[[0-9;]*m/g;
 
+interface PwError {
+  message?: string;
+  snippet?: string;
+}
 interface PwResult {
   status?: string;
-  error?: { message?: string };
-  errors?: { message?: string }[];
+  error?: PwError;
+  errors?: PwError[];
   attachments?: { name?: string; path?: string }[];
 }
 interface PwSpec {
@@ -42,14 +46,20 @@ function toCheck(file: string): string {
  * On a timeout Playwright reports a bare "Test timeout of 30000ms exceeded."
  * first and the step that hung (with its call log, e.g. "<div> intercepts
  * pointer events") second. Keep every message, minus any that a more
- * detailed one already contains.
+ * detailed one already contains, each with the code around its line: in a
+ * check with four assertions, that's what says which one failed.
  */
-function failureMessage(r: { error?: { message?: string }; errors?: { message?: string }[] }): string {
-  const all = [...(r.errors ?? []), ...(r.error ? [r.error] : [])]
-    .map((e) => (e.message ?? "").replace(ANSI, "").trim())
-    .filter(Boolean);
-  const unique = [...new Set(all)];
-  return unique.filter((m) => !unique.some((o) => o !== m && o.includes(m))).join("\n\n");
+function failureMessage(r: PwResult): string {
+  const snippets = new Map<string, string>();
+  for (const e of [...(r.errors ?? []), ...(r.error ? [r.error] : [])]) {
+    const msg = (e.message ?? "").replace(ANSI, "").trim();
+    if (msg && !snippets.get(msg)) snippets.set(msg, (e.snippet ?? "").replace(ANSI, "").trimEnd());
+  }
+  const msgs = [...snippets.keys()];
+  return msgs
+    .filter((m) => !msgs.some((o) => o !== m && o.includes(m)))
+    .map((m) => (snippets.get(m) ? `${m}\n\n${snippets.get(m)}` : m))
+    .join("\n\n");
 }
 
 function collect(suite: PwSuite, root: string, into: Map<string, FileTally>): void {

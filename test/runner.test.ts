@@ -51,3 +51,15 @@ test("a timeout reports the step that hung, not just that time ran out", () => {
   assert.match(out!.message, /intercepts pointer events/);
   assert.equal(out!.message.match(/Test timeout/g)?.length, 1, "the bare timeout line is not repeated");
 });
+
+test("a failure shows the code around the failing line, so the agent knows which assertion it was", () => {
+  const message = "Error: expect(locator).toHaveAttribute(expected) failed\n\nExpected: \"dark\"\nReceived: \"light\"";
+  const snippet = "  18 |     await page.reload();\n> 20 |     await expect(html).toHaveAttribute(\"data-theme\", want);";
+  const err = { message, snippet };
+  const failed = { suites: [{ title: "2-theme.spec.ts", file: "2-theme.spec.ts", suites: [],
+      specs: [spec("Theme survives a reload", "unexpected", [result("failed", { error: err, errors: [err] })])] }] };
+  const [out] = parseReport(failed, root, [".thisisfine/checks/2-theme.spec.ts"]);
+  assert.match(out!.message, /Received: "light"/);
+  assert.match(out!.message, /await page\.reload\(\);\n> 20 \|/);
+  assert.equal(out!.message.match(/> 20 \|/g)?.length, 1, "error and errors[0] are the same failure: shown once");
+});
