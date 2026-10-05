@@ -55,9 +55,11 @@ test("a timeout reports the step that hung, not just that time ran out", () => {
 test("a failure shows the code around the failing line, so the agent knows which assertion it was", () => {
   const message = "Error: expect(locator).toHaveAttribute(expected) failed\n\nExpected: \"dark\"\nReceived: \"light\"";
   const snippet = "  18 |     await page.reload();\n> 20 |     await expect(html).toHaveAttribute(\"data-theme\", want);";
-  const err = { message, snippet };
+  // Playwright 1.61's real shape: `error` keeps the snippet in its own field, `errors[]` folds it into the message
+  const error = { message, snippet };
+  const errors = [{ message: `${message}\n\n${snippet}` }];
   const failed = { suites: [{ title: "2-theme.spec.ts", file: "2-theme.spec.ts", suites: [],
-      specs: [spec("Theme survives a reload", "unexpected", [result("failed", { error: err, errors: [err] })])] }] };
+      specs: [spec("Theme survives a reload", "unexpected", [result("failed", { error, errors })])] }] };
   const [out] = parseReport(failed, root, [".thisisfine/checks/2-theme.spec.ts"]);
   assert.match(out!.message, /Received: "light"/);
   assert.match(out!.message, /await page\.reload\(\);\n> 20 \|/);

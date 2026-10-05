@@ -58,7 +58,7 @@ function quoteHuman(p: PromiseState): string {
 }
 
 function indent(text: string, by = "   "): string {
-  return text.trim().split("\n").slice(0, 12).map((l) => by + l).join("\n");
+  return text.trim().split("\n").slice(0, 20).map((l) => by + l).join("\n");
 }
 
 /** Stop-hook `reason`: read by the agent, which must keep working. */
