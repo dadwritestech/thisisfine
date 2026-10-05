@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { loadConfig, detectConfig, writeScaffold } from "./config.ts";
 import { decideStop } from "./gate.ts";
-import { repoRoot, treeId } from "./git.ts";
+import { changedSince, footprint, repoRoot, treeId } from "./git.ts";
 import { decideGuard } from "./guard.ts";
 import { fileHash } from "./hash.ts";
 import { integrityProblems } from "./integrity.ts";
@@ -15,7 +15,7 @@ import { appendMirror, mirrorCheckContent, readMirror } from "./mirror.ts";
 import { decidePrompt, newProposalId } from "./prompt.ts";
 import { activePromises, foldPromises, nextNumber } from "./promises.ts";
 import { prove } from "./prove.ts";
-import { pendingMessage, proofLine, sessionContext, shortDate, statusText } from "./render.ts";
+import { pendingMessage, proofLine, sessionContext, shortDate, sideEffectWarning, statusText } from "./render.ts";
 import { restoredLedger } from "./restore.ts";
 import { runChecks } from "./runner.ts";
 import { homeDir, keyIdOf, loadOrCreateKey, verifyRecord } from "./sign.ts";
@@ -184,8 +184,11 @@ async function cmdPropose(v: Record<string, string | boolean | undefined>): Prom
     : undefined;
   if (sabotage && !existsSync(sabotage.patch)) throw new UsageError(`--sabotage ${v.sabotage}: no such file`);
   out(`Proving promise #${number}: running ${check} against the app as it is now${sabotage ? ", then with the sabotage patch" : ", then without the change"}...`);
+  const files = footprint(root);
   const proof = await prove({ root, config, check, base: typeof v.base === "string" ? v.base : undefined, sabotage, runDir });
   if (fileHash(join(root, check)) !== before) throw new Error(`${check} changed while it was being proved. Propose again.`);
+  // "without" runs in a throwaway worktree; only the "now" run can touch the user's folder
+  const warning = sideEffectWarning(changedSince(root, files));
 
   const rec: ProposalRecord = {
     kind: "proposal", id: newProposalId(), action: "lock", number, sentence, check, checkHash: before,
@@ -195,8 +198,11 @@ async function cmdPropose(v: Record<string, string | boolean | undefined>): Prom
   out(proofLine(proof));
   const shots = [proof.now.screenshot && `now: ${proof.now.screenshot}`, proof.without.screenshot && `without: ${proof.without.screenshot}`].filter(Boolean);
   if (shots.length) out(`Screenshots (${shots.join(", ")})`);
+  if (warning) out(warning);
   out("");
-  out("Ask the human exactly this, then end your turn. Only their reply can lock it:");
+  out(warning
+    ? "Tell the human about the files above, then ask exactly this and end your turn. Only their reply can lock it:"
+    : "Ask the human exactly this, then end your turn. Only their reply can lock it:");
   out(pendingMessage([...all, rec]));
   return 0;
 }

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { brokenForAgent, brokenForHuman, fineMessage, proofLine, proposalLine, shortDate, statusText } from "../src/render.ts";
+import { brokenForAgent, brokenForHuman, fineMessage, proofLine, sideEffectWarning, proposalLine, shortDate, statusText } from "../src/render.ts";
 import { foldPromises } from "../src/promises.ts";
 import type { Proof } from "../src/types.ts";
 import { lock, proposal, retire } from "./helpers.ts";
@@ -57,4 +57,12 @@ test("status text lists active, retired and pending", () => {
   assert.match(text, /#1 +✅ proven +"Badge shows the cart count"\n +locked Oct 4 \("y"\)/);
   assert.match(text, /#2 +retired +"Empty cart disables checkout"\n +retired Oct 5/);
   assert.match(text, /pending #3 "Logo links home"/);
+});
+
+test("sideEffectWarning names the files the app wrote, and is silent when there are none", () => {
+  assert.equal(sideEffectWarning([]), "");
+  const w = sideEffectWarning(["config.json", "data/app.db"]);
+  assert.match(w, /While the check ran, the app wrote to: config\.json, data\/app\.db/);
+  assert.match(w, /every Stop/);
+  assert.match(w, /scratch copy/);
 });

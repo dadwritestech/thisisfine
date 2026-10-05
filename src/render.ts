@@ -19,6 +19,20 @@ export function proofLine(proof: Proof | null): string {
   return `✔ passes now ✔ fails ${where} (app still boots)`;
 }
 
+/**
+ * The app runs in the user's own folder, so a check that clicks "Save"
+ * saves for real. Said once, at propose time, while the human can still
+ * say no.
+ */
+export function sideEffectWarning(files: string[]): string {
+  if (files.length === 0) return "";
+  return [
+    `⚠ While the check ran, the app wrote to: ${files.join(", ")}`,
+    `  The gate re-runs this check before every Stop, so it will write there every time. If that is real data,`,
+    `  make the start command run the app on a scratch copy (.thisisfine/config.json), then propose again.`
+  ].join("\n");
+}
+
 /** `sentence` is only needed for retire proposals, which don't carry it. */
 export function proposalLine(p: ProposalRecord, sentence: string): string {
   if (p.action === "retire") return `Retire promise #${p.number} "${sentence}"? Reason: ${p.reason}`;

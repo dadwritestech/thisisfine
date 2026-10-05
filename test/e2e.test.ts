@@ -86,6 +86,7 @@ test("a shop, a badge, a yes, a refactor: thisisfine catches it", { skip: proces
   assert.equal(propose.code, 0, propose.stdout + propose.stderr);
   assert.match(propose.stdout, /✔ passes now ✔ fails on HEAD \(app still boots\)/);
   assert.match(propose.stdout, /Ask the human exactly this/);
+  assert.doesNotMatch(propose.stdout, /the app wrote to/, "the cart app keeps everything in the browser");
   keep(propose.stdout, "badge-works.png");
 
   // 5. The human answers. Claude Code writes the prompt to the transcript, then fires the hook.

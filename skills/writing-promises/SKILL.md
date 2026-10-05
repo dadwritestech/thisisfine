@@ -31,6 +31,9 @@ test("adding an item updates the cart badge", async ({ page }) => {
 - Find elements the way a user does: `getByRole`, `getByLabel`, `getByText`, or a `data-testid` that already exists. Avoid CSS chains that break on harmless restyling.
 - Assert the specific thing in the sentence (`toHaveText("1")`), not just that something exists.
 - Every run starts the app fresh, but databases and files persist between runs. Create the data the check needs, and don't depend on what an earlier run left behind.
+- The app runs in the human's own folder, so a check that clicks "Save" saves for real, every Stop. `propose` lists any project files the app wrote. If one holds real data (`config.json`, a `.db`), change `start` so the app uses a scratch copy, then propose again.
+- If a first-run wizard, cookie banner or modal can appear, dismiss it with `page.addLocatorHandler(overlay, () => skipButton.click())`. Otherwise it appears on a timer and blocks your click on some runs and not others. That makes the check flaky, and the proof may not catch it.
+- Let the page finish loading before you read state from it. If the check reads the current state to decide what to do (a toggle, "flip whatever is showing"), assert both directions. One direction can pass by accident when a saved default happens to equal the value you expect.
 - Keep it under ~10 seconds. No `test.skip`, `test.only`, `test.fixme`, or fixed `waitForTimeout` sleeps.
 
 ## Proving it

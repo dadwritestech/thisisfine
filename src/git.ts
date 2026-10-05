@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { copyFileSync, cpSync, existsSync, lstatSync, rmdirSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, lstatSync, rmdirSync, rmSync, statSync, symlinkSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { STATE_DIR } from "./types.ts";
@@ -12,10 +12,15 @@ const IDENTITY = {
 };
 
 export function git(cwd: string, args: string[], env: Record<string, string> = {}): string {
+  return gitRaw(cwd, args, env).trim();
+}
+
+/** Untrimmed, for column-sensitive output: porcelain's first line can start with a space. */
+function gitRaw(cwd: string, args: string[], env: Record<string, string> = {}): string {
   try {
     return execFileSync("git", args, {
       cwd, encoding: "utf8", env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024
-    }).trim();
+    });
   } catch (err) {
     const e = err as { stderr?: string; message: string };
     throw new Error(`git ${args.join(" ")}: ${(e.stderr || e.message).trim()}`);
@@ -119,6 +124,41 @@ export function removeWorktree(root: string, dir: string): void {
   tryGit(root, ["worktree", "remove", "--force", dir]);
   if (existsSync(dir)) rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
   tryGit(root, ["worktree", "prune"]);
+}
+
+/**
+ * Size and mtime of every file git would mention: modified, untracked and,
+ * crucially, gitignored. Apps keep their real data in ignored files
+ * (config.json, *.db), and a check that clicks "Save" writes to them.
+ * Wholly ignored directories (node_modules/, caches) are listed by git as
+ * one entry and skipped here: churn, not data. So is thisisfine's own dir.
+ */
+export function footprint(root: string): Map<string, string> {
+  const raw = gitRaw(root, ["status", "--porcelain=v1", "-z", "--ignored=matching", "--untracked-files=all"]);
+  const parts = raw.split("\0");
+  const files = new Map<string, string>();
+  for (let i = 0; i < parts.length; i++) {
+    const entry = parts[i]!;
+    if (entry.length < 4) continue;
+    if (/[RC]/.test(entry.slice(0, 2))) i++; // a rename's old path follows; it no longer exists
+    const rel = entry.slice(3);
+    if (rel.endsWith("/") || rel.startsWith(`${STATE_DIR}/`)) continue;
+    let sig = "gone";
+    try {
+      const s = statSync(join(root, rel));
+      sig = `${s.size}:${s.mtimeMs}`;
+    } catch {
+      // deleted: "gone" is its signature
+    }
+    files.set(rel, sig);
+  }
+  return files;
+}
+
+/** Files that appeared, changed or disappeared since `before`, sorted. */
+export function changedSince(root: string, before: Map<string, string>): string[] {
+  const after = footprint(root);
+  return [...after].filter(([rel, sig]) => before.get(rel) !== sig).map(([rel]) => rel).sort();
 }
 
 /** `--recount`: hunk line counts in hand-written (and agent-written) patches are often wrong. */

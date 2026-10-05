@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { addWorktree, applyPatch, defaultBase, prepareWorktree, removeWorktree, repoRoot, resolveRef, snapshotCommit, treeId } from "../src/git.ts";
+import { addWorktree, applyPatch, changedSince, defaultBase, footprint, prepareWorktree, removeWorktree, repoRoot, resolveRef, snapshotCommit, treeId } from "../src/git.ts";
 import { commitAll, initRepo, put, sh, tempDir } from "./helpers.ts";
 
 function repo(): string {
@@ -31,6 +31,22 @@ test("treeId sees modified and untracked files, ignores gitignored ones, and tou
   put(root, "app.js", "v2\n");
   assert.notEqual(treeId(root), t1);
   assert.match(sh(root, "git", ["status", "--porcelain"]), /\?\? new\.js/, "real index untouched");
+});
+
+test("footprint names the project files an app run wrote, including gitignored ones", () => {
+  const root = repo();
+  put(root, ".gitignore", "node_modules/\n*.log\nconfig.json\ncache/\n");
+  put(root, "config.json", '{"theme":""}');
+  commitAll(root, "ignore more");
+  const before = footprint(root);
+  put(root, "config.json", '{"theme":"dark"}'); // the app saved a setting: the case that matters
+  put(root, "app.js", "v2\n");                   // tracked file edited
+  put(root, "uploads.txt", "new");               // untracked file created
+  put(root, "server.log", "noise");              // ignored file created
+  put(root, "cache/blob", "x");                  // inside an ignored directory: not listed, by design
+  put(root, ".thisisfine/runs/r/report.json", "{}"); // thisisfine's own output
+  assert.deepEqual(changedSince(root, before), ["app.js", "config.json", "server.log", "uploads.txt"]);
+  assert.deepEqual(changedSince(root, footprint(root)), [], "nothing changed since the second snapshot");
 });
 
 test("snapshotCommit captures the working tree without moving HEAD or the index", () => {
