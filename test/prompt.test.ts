@@ -1,13 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { decidePrompt } from "../src/prompt.ts";
-import { loadOrCreateKey, keyIdOf, verifyRecord } from "../src/sign.ts";
+import { checkSignature, loadOrCreateSigner, publicKeyEntry } from "../src/sign.ts";
 import { defaultState } from "../src/state.ts";
 import type { LockRecord, RetireRecord } from "../src/types.ts";
 import { lock, proposal, tempDir } from "./helpers.ts";
 
-const key = loadOrCreateKey(tempDir());
-const base = { promptId: "pid-1", sessionId: "sess-1", transcriptPath: "/t.jsonl", now: "2026-10-04T12:00:00.000Z", key, keyId: keyIdOf(key), hashOf: () => "abcdabcdabcdabcd" };
+const signer = loadOrCreateSigner(tempDir());
+const keyring = new Map([[signer.id, publicKeyEntry(signer.publicPem, { name: "sam", file: null, local: true })]]);
+const base = { promptId: "pid-1", sessionId: "sess-1", transcriptPath: "/t.jsonl", now: "2026-10-04T12:00:00.000Z", signer, hashOf: () => "abcdabcdabcdabcd" };
 
 test("y with a pending proposal appends a signed lock and tells both sides", () => {
   const d = decidePrompt([proposal()], defaultState(), { ...base, prompt: "y" });
@@ -18,7 +19,9 @@ test("y with a pending proposal appends a signed lock and tells both sides", () 
   assert.equal(l.words, "y");
   assert.equal(l.promptId, "pid-1");
   assert.equal(l.proposal, "p1");
-  assert.equal(verifyRecord(l, key), true);
+  assert.equal(checkSignature(l, keyring), "valid");
+  assert.equal(l.alg, "ed25519");
+  assert.equal(l.keyId, signer.id);
   assert.match(d.systemMessage, /🔒 Locked promise #1 "Badge shows the cart count"/);
   assert.match(d.additionalContext, /#1 is now locked/);
 });
@@ -56,7 +59,7 @@ test("y to a retire proposal appends a signed retire", () => {
   assert.equal(r.kind, "retire");
   assert.equal(r.number, 1);
   assert.equal(r.reason, "redesign");
-  assert.equal(verifyRecord(r, key), true);
+  assert.equal(checkSignature(r, keyring), "valid");
   assert.match(d.systemMessage, /Retired promise #1/);
 });
 

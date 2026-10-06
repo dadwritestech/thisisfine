@@ -26,6 +26,7 @@ const STRING: FieldSpec = { check: (v) => typeof v === "string", describe: "a st
 const NONEMPTY: FieldSpec = { check: (v) => typeof v === "string" && v.trim() !== "", describe: "a non-empty string" };
 const NUMBER: FieldSpec = { check: (v) => Number.isInteger(v) && (v as number) > 0, describe: "a positive integer" };
 const PROOF: FieldSpec = { check: (v) => v === null || (typeof v === "object" && !Array.isArray(v)), describe: "an object or null" };
+const ALG: FieldSpec = { check: (v) => v === undefined || v === "ed25519", describe: "absent (an old HMAC signature) or \"ed25519\"" };
 const ACTION: FieldSpec = { check: (v) => v === "lock" || v === "retire", describe: "lock or retire" };
 
 /**
@@ -41,7 +42,7 @@ export function isContainedPath(v: unknown): boolean {
 const CONTAINED: FieldSpec = { check: isContainedPath, describe: "a project-relative path with forward slashes" };
 
 const CONFIRMATION: Record<string, FieldSpec> = {
-  words: STRING, promptId: STRING, sessionId: STRING, transcriptPath: STRING, keyId: NONEMPTY, sig: NONEMPTY
+  words: STRING, promptId: STRING, sessionId: STRING, transcriptPath: STRING, keyId: NONEMPTY, sig: NONEMPTY, alg: ALG
 };
 
 const SHAPES: Record<RecordKind, Record<string, FieldSpec>> = {

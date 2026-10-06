@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { userInfo } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -8,7 +9,7 @@ import { decideStop } from "./gate.ts";
 import { changedSince, footprint, repoRoot, treeId } from "./git.ts";
 import { decideGuard } from "./guard.ts";
 import { fileHash } from "./hash.ts";
-import { integrityProblems } from "./integrity.ts";
+import { integrityProblems, keyLabel } from "./integrity.ts";
 import { appendRecord, ledgerPath, readLedger } from "./ledger.ts";
 import { startApp } from "./launcher.ts";
 import { appendMirror, mirrorCheckContent, readMirror } from "./mirror.ts";
@@ -18,7 +19,9 @@ import { prove } from "./prove.ts";
 import { pendingMessage, proofLine, sessionContext, shortDate, sideEffectWarning, statusText } from "./render.ts";
 import { restoredLedger } from "./restore.ts";
 import { pageErrors, runChecks } from "./runner.ts";
-import { homeDir, keyIdOf, loadOrCreateKey, verifyRecord } from "./sign.ts";
+import { buildKeyring, KEYS_DIR, publishPublicKey, readPublicKeys } from "./keys.ts";
+import { checkSignature, homeDir, loadOrCreateSigner, loadSigner } from "./sign.ts";
+import type { Signer } from "./sign.ts";
 import { loadState, saveState } from "./state.ts";
 import { verifyWords } from "./transcript.ts";
 import type { CheckOutcome, LedgerRecord, ProposalRecord, SignedRecord } from "./types.ts";
@@ -35,7 +38,8 @@ Usage: thisisfine <command>
   status                       list promises
   check                        run every active promise now
   retire <n> --reason "..."    ask the human to retire a promise
-  verify                       audit signatures, check files, and the human's words
+  verify [--strict]            audit signatures, check files, and the human's words;
+                               --strict (for CI) also fails on locks no committed key can check
   restore                      put back exactly what the human confirmed
 
 Hooks (run by Claude Code, not by hand): hook-session, hook-prompt, hook-guard, hook-stop
@@ -231,9 +235,8 @@ async function cmdCheck(): Promise<number> {
   const root = requireRoot();
   const { records: all, readError } = readRecords(root);
   const state = loadState(root);
-  const key = loadOrCreateKey();
   const d = await decideStop({
-    records: all, readError, mirror: readMirror(root), key, keyId: keyIdOf(key), hashOf: hashOf(root),
+    records: all, readError, mirror: readMirror(root), keyring: buildKeyring(root), hashOf: hashOf(root),
     treeId: safeTreeId(root), state: { ...state, lastGreenTree: null, lastBlockKey: null, consecutiveBlocks: 0 },
     runAll: (checks) => runAll(root, checks, "check")
   });
@@ -264,35 +267,50 @@ function cmdRetire(positionals: string[], v: Record<string, string | boolean | u
   return 0;
 }
 
-function cmdVerify(): number {
+function cmdVerify(strict: boolean): number {
   const root = requireRoot();
   const { records: all, readError } = readRecords(root);
   if (readError) {
     out(`✖ ${STATE_DIR}/promises.jsonl can't be read: ${readError}\n  Run "thisisfine restore" to rebuild it.`);
     return 1;
   }
-  const key = loadOrCreateKey();
-  const keyId = keyIdOf(key);
-  const problems = integrityProblems({ records: all, mirror: readMirror(root), key, keyId, hashOf: hashOf(root) });
+  // Reads keys, never makes one: this runs on teammates' machines and in CI.
+  const keyring = buildKeyring(root);
+  const problems = integrityProblems({ records: all, mirror: readMirror(root), keyring, hashOf: hashOf(root) });
   let bad = problems.length > 0;
   out(`thisisfine verify: ${all.length} records`);
+  const { errors: keyErrors } = readPublicKeys(root);
+  const keys = [...keyring.values()];
+  if (keys.length || keyErrors.length) {
+    out("Keys:");
+    for (const k of keys) {
+      const where = k.file ?? (k.alg === "hmac" ? "not shareable (HMAC)" : `not in ${KEYS_DIR}/`);
+      out(`  ${k.id}  ${where}${k.local ? "  (this machine)" : ""}`);
+    }
+    for (const e of keyErrors) out(`  ✖ ${e}`);
+  }
   for (const r of all) {
     if (r.kind !== "lock" && r.kind !== "retire") continue;
     const what = `#${r.number} ${r.kind === "lock" ? "lock" : "retirement"} ("${r.words.trim()}", ${shortDate(r.kind === "lock" ? r.confirmedAt : r.retiredAt)})`;
-    if (r.keyId !== keyId) {
-      out(`  · ${what}: signed on another machine (key ${r.keyId}), can't be checked here`);
+    const key = keyring.get(r.keyId);
+    const signature = checkSignature(r, keyring);
+    if (signature === "unknown") {
+      if (strict) bad = true;
+      out(`  ${strict ? "✖" : "·"} ${what}: signed with key ${r.keyId}, and no key in ${KEYS_DIR}/ can check it${r.alg ? "" : " (an old per-machine HMAC key)"}`);
       continue;
     }
-    if (!verifyRecord(r, key)) {
-      out(`  ✖ ${what}: signature doesn't match`);
+    if (signature === "invalid") {
+      bad = true;
+      out(`  ✖ ${what}: signature doesn't match ${keyLabel(key, r.keyId)}`);
       continue;
     }
+    const by = `signed by ${keyLabel(key, r.keyId)}`;
     const words = verifyWords(r.transcriptPath, r.promptId, r.words);
     const note = {
-      verified: "✔ signed, and the transcript shows a human typing those words",
-      missing: "✔ signed (the session transcript is gone, so the words can't be re-checked)",
-      "not-human": "✖ signed, but in the transcript those words didn't come from a human",
-      "not-found": "✖ signed, but the transcript has no such prompt"
+      verified: `✔ ${by}, and the transcript shows a human typing those words`,
+      missing: `✔ ${by} (the session transcript isn't on this machine, so the words can't be re-checked)`,
+      "not-human": `✖ ${by}, but in the transcript those words didn't come from a human`,
+      "not-found": `✖ ${by}, but the transcript has no such prompt`
     }[words];
     if (words === "not-human" || words === "not-found") bad = true;
     out(`  ${note.slice(0, 1)} ${what}: ${note.slice(2)}`);
@@ -316,10 +334,9 @@ function cmdRestore(): number {
     renameSync(path, aside);
     out(`Moved the unreadable ledger to ${relative(root, aside).replace(/\\/g, "/")}`);
   }
-  const key = loadOrCreateKey();
-  const keyId = keyIdOf(key);
+  const keyring = buildKeyring(root);
   const mirror = readMirror(root);
-  const { records: fixed, restored } = restoredLedger(current, mirror, (r) => r.keyId === keyId && !verifyRecord(r, key));
+  const { records: fixed, restored } = restoredLedger(current, mirror, (r) => checkSignature(r, keyring) === "invalid");
   if (readError || restored.length || fixed.length !== current.length) {
     mkdirSync(dirname(path), { recursive: true });
     const tmp = `${path}.tmp`;
@@ -329,6 +346,12 @@ function cmdRestore(): number {
   for (const r of restored) out(`Restored #${r.number}'s ${r.kind === "lock" ? "lock" : "retirement"} ("${r.words.trim()}")`);
   const dropped = current.length - (fixed.length - restored.length);
   if (dropped > 0) out(`Removed ${dropped} record${dropped === 1 ? "" : "s"} whose signature didn't match`);
+
+  const signer = loadSigner();
+  if (signer && fixed.some((r) => (r.kind === "lock" || r.kind === "retire") && r.keyId === signer.id)) {
+    const key = publishOwnKey(root, signer);
+    if (key.created) out(`Restored ${key.file} (this machine's public key)`);
+  }
 
   let unrestorable = 0;
   for (const p of activePromises(fixed)) {
@@ -384,6 +407,21 @@ function safeTreeId(root: string): string | null {
   }
 }
 
+/** Named after the OS user, so a teammate reading `verify` sees who confirmed each promise. */
+function publishOwnKey(root: string, signer: Signer): { file: string; created: boolean } {
+  let name = "key";
+  try {
+    name = userInfo().username;
+  } catch {
+    // no user name (some containers): "key" is fine, the file is found by content
+  }
+  return publishPublicKey(root, signer, name);
+}
+
+function keyPublishedMessage(file: string): string {
+  return `Your public key is in ${file}; commit it so teammates and CI can verify your promises ("thisisfine verify --strict").`;
+}
+
 function appendSigned(root: string, rec: LedgerRecord): void {
   appendRecord(ledgerPath(root), rec);
   if (rec.kind !== "lock" && rec.kind !== "retire") return;
@@ -415,18 +453,20 @@ async function runHook(name: string, input: HookInput): Promise<number> {
   if (name === "hook-prompt") {
     const { records: all, readError } = readRecords(root);
     if (readError) return 0;
-    const key = loadOrCreateKey();
+    const signer = loadOrCreateSigner();
     const d = decidePrompt(all, loadState(root), {
       prompt: input.prompt ?? "", promptId: input.prompt_id ?? "", sessionId: input.session_id ?? "",
       transcriptPath: input.transcript_path ?? "", now: new Date().toISOString(),
-      key, keyId: keyIdOf(key), hashOf: hashOf(root)
+      signer, hashOf: hashOf(root)
     });
     for (const r of d.append) appendSigned(root, r);
     saveState(root, d.state);
-    if (d.additionalContext || d.systemMessage) {
+    const published = d.append.some((r) => r.kind === "lock" || r.kind === "retire") ? publishOwnKey(root, signer) : null;
+    const systemMessage = [d.systemMessage, published?.created ? keyPublishedMessage(published.file) : ""].filter(Boolean).join(" ");
+    if (d.additionalContext || systemMessage) {
       emit({
         hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: d.additionalContext },
-        ...(d.systemMessage ? { systemMessage: d.systemMessage } : {})
+        ...(systemMessage ? { systemMessage } : {})
       });
     }
     return 0;
@@ -444,9 +484,8 @@ async function runHook(name: string, input: HookInput): Promise<number> {
 
   if (name === "hook-stop") {
     const { records: all, readError } = readRecords(root);
-    const key = loadOrCreateKey();
     const d = await decideStop({
-      records: all, readError, mirror: readMirror(root), key, keyId: keyIdOf(key), hashOf: hashOf(root),
+      records: all, readError, mirror: readMirror(root), keyring: buildKeyring(root), hashOf: hashOf(root),
       treeId: safeTreeId(root), state: loadState(root), runAll: (checks) => runAll(root, checks, "stop")
     });
     saveState(root, d.state);
@@ -487,7 +526,7 @@ export async function runCli(argv: string[]): Promise<number> {
       options: {
         sentence: { type: "string" }, check: { type: "string" }, base: { type: "string" },
         sabotage: { type: "string" }, "sabotage-note": { type: "string" }, replaces: { type: "string" },
-        reason: { type: "string" }, "no-install": { type: "boolean" }
+        reason: { type: "string" }, "no-install": { type: "boolean" }, strict: { type: "boolean" }
       }
     });
     switch (command) {
@@ -496,7 +535,7 @@ export async function runCli(argv: string[]): Promise<number> {
       case "status": return cmdStatus();
       case "check": return await cmdCheck();
       case "retire": return cmdRetire(positionals, v);
-      case "verify": return cmdVerify();
+      case "verify": return cmdVerify(v.strict === true);
       case "restore": return cmdRestore();
       default:
         err(`thisisfine: unknown command "${command}"\n\n${USAGE}`);

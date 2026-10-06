@@ -53,9 +53,11 @@ export interface ProposalRecord {
 
 /**
  * What a human "y" adds to a record. Written by the UserPromptSubmit hook,
- * never by the agent, and covered by the HMAC in `sig`.
+ * never by the agent, and covered by the signature in `sig`.
  */
 export interface Confirmation {
+  /** "ed25519"; absent on older records, which are HMAC-signed with a per-machine key. */
+  alg?: "ed25519";
   words: string;
   promptId: string;
   sessionId: string;
