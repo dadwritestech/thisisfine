@@ -14,7 +14,7 @@ const config = { start: "node server.js", ...DEFAULTS };
  * proof worktree is anything else. `nowStatus` / `withoutStatus` say how the
  * check behaves in each; `withoutBoots: false` makes the worktree app crash.
  */
-function deps(o: { nowStatus?: CheckOutcome["status"]; withoutStatus?: CheckOutcome["status"]; withoutBoots?: boolean; base?: string | null }) {
+function deps(o: { nowStatus?: CheckOutcome["status"]; nowMessage?: string; withoutStatus?: CheckOutcome["status"]; withoutBoots?: boolean; base?: string | null }) {
   const calls: string[] = [];
   const d: ProveDeps = {
     startApp: async (s) => {
@@ -27,7 +27,8 @@ function deps(o: { nowStatus?: CheckOutcome["status"]; withoutStatus?: CheckOutc
       const where = r.baseUrl === "http://now" ? "now" : "without";
       calls.push(`run:${where}:retries=${r.retries}`);
       const status = where === "now" ? (o.nowStatus ?? "passed") : (o.withoutStatus ?? "failed");
-      return [{ check: CHECK, status, message: status === "failed" ? "expected 3, got 0" : "", screenshot: `${where}.png` }];
+      const message = where === "now" && o.nowMessage ? o.nowMessage : status === "failed" ? "expected 3, got 0" : "";
+      return [{ check: CHECK, status, message, screenshot: `${where}.png` }];
     },
     snapshotCommit: () => (calls.push("snapshot"), "snap"),
     defaultBase: () => (o.base === undefined ? "HEAD~1" : o.base),
@@ -62,6 +63,18 @@ test("passes now + fails on HEAD~1 while booting = proven", async () => {
 
 test("a check that fails now is refused outright", async () => {
   await assert.rejects(run({ nowStatus: "failed" }).result, /fails on the current app/);
+});
+
+test("a browser that can't start is the environment, not a failing check", async () => {
+  const nowMessage = "Error: browserType.launch: spawn EPERM\nCall log:\n  - <launching> C:\\ms-playwright\\chrome-headless-shell.exe --headless";
+  await assert.rejects(run({ nowStatus: "failed", nowMessage }).result, (e: Error) => {
+    assert.doesNotMatch(e.message, /fails on the current app/);
+    assert.match(e.message, /couldn't start the browser/);
+    assert.match(e.message, /spawn EPERM/);
+    assert.match(e.message, /sandbox/);
+    assert.doesNotMatch(e.message, /--headless/, "the launch command line is noise");
+    return true;
+  });
 });
 
 test("passing on the base too = unproven, with a hint", async () => {

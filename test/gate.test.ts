@@ -116,6 +116,18 @@ test("the app not starting blocks", async () => {
   assert.match(d.reason, /exited with code 1/);
 });
 
+test("a browser that can't start is uncheckable, not a broken promise", async () => {
+  const launch = "Error: browserType.launch: spawn EPERM\nCall log:\n  - <launching> chrome-headless-shell.exe --headless";
+  const runAll: StopInput["runAll"] = async (checks) => ({ outcomes: checks.map((check) => ({ check, status: "failed" as const, message: launch, screenshot: null })), coverage: null });
+  const d = await decideStop(input({ runAll }));
+  assert.equal(d.block, true, "nothing was checked, so it can't pass");
+  assert.doesNotMatch(d.reason, /You broke/);
+  assert.match(d.reason, /couldn't start the browser/);
+  assert.match(d.reason, /spawn EPERM/);
+  assert.doesNotMatch(d.reason, /Get the app starting/, "the app is fine; the machine isn't");
+  assert.match(d.systemMessage, /browser/);
+});
+
 test("after 3 identical blocks the 4th stop is allowed and the human is told", async () => {
   let state = defaultState();
   for (let n = 1; n <= 3; n++) {

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import * as gitOps from "./git.ts";
 import { startApp } from "./launcher.ts";
 import type { RunningApp, StartOptions } from "./launcher.ts";
+import { browserLaunchError, browserText } from "./render.ts";
 import { runChecks } from "./runner.ts";
 import type { RunOptions } from "./runner.ts";
 import type { CheckOutcome, Config, Proof } from "./types.ts";
@@ -75,6 +76,8 @@ export async function prove(o: ProveOptions): Promise<Proof> {
   if (!now.booted) throw new Error(`The app didn't start, so nothing can be proven yet.\n${now.bootError}`);
   if (now.outcome?.status !== "passed") {
     const why = now.outcome?.status === "missing" ? now.outcome.message : now.outcome?.message || "no result";
+    const launch = browserLaunchError(why);
+    if (launch) throw new Error(browserText(launch, "Run this command again outside the sandbox (with escalated permissions), or ask the human to run it."));
     throw new Error(`The check fails on the current app, so there's nothing to lock yet:\n${why}${now.outcome?.screenshot ? `\nScreenshot: ${now.outcome.screenshot}` : ""}`);
   }
 

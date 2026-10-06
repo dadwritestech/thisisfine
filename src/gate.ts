@@ -1,7 +1,7 @@
 import { integrityProblems } from "./integrity.ts";
 import { activePromises } from "./promises.ts";
 import {
-  brokenForAgent, brokenForHuman, fineMessage, integrityForAgent, integrityForHuman,
+  brokenForAgent, brokenForHuman, browserLaunchError, fineMessage, integrityForAgent, integrityForHuman,
   loopBreakMessage, pendingMessage, stuckMessage, uncheckableForAgent, uncheckableForHuman
 } from "./render.ts";
 import type { Broken } from "./render.ts";
@@ -115,6 +115,13 @@ export async function decideStop(i: StopInput): Promise<StopDecision> {
     const message = err instanceof Error ? err.message : String(err);
     return block(`uncheckable:${message.split("\n")[0]}`, uncheckableForAgent(message), uncheckableForHuman(message, who),
       stuckMessage("the promises couldn't be checked", MAX_BLOCKS, who));
+  }
+
+  // No browser means no check ran: that's not a broken promise, and not a pass either.
+  const launch = outcomes.map((o) => browserLaunchError(o.message)).find((l) => l !== null);
+  if (launch) {
+    return block(`uncheckable:${launch}`, uncheckableForAgent(launch), uncheckableForHuman(launch, who),
+      stuckMessage("the browser couldn't start", MAX_BLOCKS, who));
   }
 
   const byCheck = new Map(outcomes.map((o) => [o.check, o]));

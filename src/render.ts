@@ -115,16 +115,35 @@ export function integrityForAgent(problems: string[]): string {
 }
 
 /** When the app can't even be checked: the agent has to fix that first. */
+/**
+ * "browserType.launch: spawn EPERM" and friends: Playwright never got a
+ * browser, so no check ran. Returns that line, or null.
+ */
+export function browserLaunchError(message: string): string | null {
+  return /^.*browserType\.launch: .*$/m.exec(message)?.[0].replace(/^Error: /, "").trim() ?? null;
+}
+
+/** Says plainly that the machine failed, not the app, so nobody "fixes" a working check. */
+export function browserText(line: string, next: string): string {
+  return [
+    "thisisfine couldn't start the browser, so no check ran (this says nothing about the app):",
+    `   ${line}`,
+    `Agent sandboxes can block it (Codex's Windows sandbox does, on and off). ${next}`
+  ].join("\n");
+}
+
 export function uncheckableForAgent(error: string): string {
+  const launch = browserLaunchError(error);
   return [
     "🔥 This is NOT fine. thisisfine couldn't check the promises, so it can't let you stop:",
-    indent(error, "   "),
-    "",
-    "Get the app starting again (the start command lives in .thisisfine/config.json; ask the human before changing it)."
+    indent(launch ? browserText(launch, "That's the machine, not your change: tell the human.") : error, "   "),
+    ...(launch ? [] : ["", "Get the app starting again (the start command lives in .thisisfine/config.json; ask the human before changing it)."])
   ].join("\n");
 }
 
 export function uncheckableForHuman(error: string, who = "Claude"): string {
+  const launch = browserLaunchError(error);
+  if (launch) return `🔥 This is NOT fine. Couldn't start the browser to check the promises (${launch}). Nothing was checked.`;
   return `🔥 This is NOT fine. Couldn't check the promises: ${error.trim().split("\n")[0]}. Sent ${who} back to fix it.`;
 }
 
