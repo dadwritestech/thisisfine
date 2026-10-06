@@ -1,6 +1,11 @@
 <p align="center">
-  <img src="docs/img/banner.svg" alt="thisisfine: a coffee mug with a padlock on it, while small flames flicker along the bottom" width="100%">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/img/mascot-dark.png">
+    <img src="docs/img/mascot.png" width="280" alt="The thisisfine mascot: a coffee mug with a padlock on its chest, smiling calmly and raising a tiny cup while the room burns around it">
+  </picture>
 </p>
+
+<h1 align="center">thisisfine</h1>
 
 <p align="center">
   <b>Your coding agent says "✅ Done" while your app is on fire.</b><br>
