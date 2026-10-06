@@ -233,10 +233,6 @@ Flaky checks warn and don't block. If the app can't start, Claude is blocked wit
 **Why the name?**
 It's the face every coding agent makes while it reports success from inside a burning building. The phrase comes from KC Green's comic *On Fire*. thisisfine isn't affiliated with it, and the art here is original.
 
-
-
-
-
 ## Contributing
 
 ```bash
