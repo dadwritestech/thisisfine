@@ -4,7 +4,7 @@ import { decideStop } from "../src/gate.ts";
 import type { StopInput } from "../src/gate.ts";
 import { keyIdOf, loadOrCreateKey, signRecord } from "../src/sign.ts";
 import { defaultState } from "../src/state.ts";
-import type { CheckOutcome } from "../src/types.ts";
+import type { CheckOutcome, Coverage } from "../src/types.ts";
 import { lock, proposal, tempDir } from "./helpers.ts";
 
 const key = loadOrCreateKey(tempDir());
@@ -12,10 +12,21 @@ const keyId = keyIdOf(key);
 const l1 = signRecord(lock({ keyId, words: "y, perfect", confirmedAt: "2026-10-03T12:00:00.000Z" }), key);
 const l2 = signRecord(lock({ keyId, proposal: "p2", number: 2, sentence: "Logo links home", check: ".thisisfine/checks/2-logo.spec.ts" }), key);
 
-function input(over: Partial<StopInput> = {}, results: Record<string, CheckOutcome["status"]> = {}): StopInput & { ran: string[][] } {
+const C1 = ".thisisfine/checks/1-badge.spec.ts";
+const C2 = ".thisisfine/checks/2-logo.spec.ts";
+const NOW = Date.parse("2026-10-06T12:00:00.000Z");
+
+/** A map made at tree-0 in which only #2 loads public/logo.svg. */
+const map = (over: Partial<Coverage> = {}): Coverage => ({
+  tree: "tree-0", madeAt: "2026-10-06T11:00:00.000Z", checks: [C1, C2],
+  files: { "public/index.html": [C1, C2], "public/logo.svg": [C2] }, dynamic: [], selectedRuns: 0, ...over
+});
+
+function input(over: Partial<StopInput> = {}, results: Record<string, CheckOutcome["status"]> = {}): StopInput & { ran: string[][]; recorded: boolean[] } {
   const ran: string[][] = [];
+  const recorded: boolean[] = [];
   return {
-    ran,
+    ran, recorded,
     records: [proposal(), l1, proposal({ id: "p2", number: 2 }), l2],
     readError: null,
     mirror: [l1, l2],
@@ -23,12 +34,16 @@ function input(over: Partial<StopInput> = {}, results: Record<string, CheckOutco
     hashOf: () => "abcdabcdabcdabcd",
     treeId: "tree-A",
     state: defaultState(),
-    runAll: async (checks) => {
+    changedSince: () => ["public/logo.svg"],
+    now: NOW,
+    runAll: async (checks, record) => {
       ran.push(checks);
-      return checks.map((check) => {
+      recorded.push(record);
+      const outcomes = checks.map((check): CheckOutcome => {
         const status = results[check] ?? "passed";
         return { check, status, message: status === "failed" ? "Expected: \"3\"\nReceived: \"0\"" : "", screenshot: status === "failed" ? ".thisisfine/runs/r/shot.png" : null };
       });
+      return { outcomes, coverage: record ? map({ tree: "recorded", madeAt: "new" }) : null };
     },
     ...over
   };
@@ -128,4 +143,82 @@ test("pending proposals are put to the human on stop", async () => {
   assert.equal(d.block, false);
   assert.match(d.systemMessage, /Lock in promise #2 "Logo links home"\?/);
   assert.match(d.systemMessage, /Reply y/);
+});
+
+// ── running only what a change can affect ────────────────────────────────
+
+test("a full green run records the map and stores it against this tree", async () => {
+  const i = input();
+  const d = await decideStop(i);
+  assert.deepEqual(i.recorded, [true]);
+  assert.deepEqual(d.state.coverage, map({ tree: "recorded", madeAt: "new" }));
+  assert.equal(d.state.lastGreenTree, "tree-A");
+  assert.equal(d.state.lastSelectedTree, null);
+});
+
+test("with a map, a change only #2 loaded runs only #2, unrecorded", async () => {
+  const i = input({ state: { ...defaultState(), lastGreenTree: "tree-0", coverage: map() } });
+  const d = await decideStop(i);
+  assert.equal(d.block, false);
+  assert.deepEqual(i.ran, [[C2]]);
+  assert.deepEqual(i.recorded, [false]);
+  assert.equal(d.systemMessage, "☕ This is fine. 1/1 promise this change can affect kept (1 others skipped: only public/logo.svg changed).");
+});
+
+test("a passing partial run never stands in for a full one", async () => {
+  const i = input({ state: { ...defaultState(), lastGreenTree: "tree-0", coverage: map() } });
+  const d = await decideStop(i);
+  assert.equal(d.state.lastGreenTree, "tree-0", "the last *full* green tree stays where it was");
+  assert.equal(d.state.lastSelectedTree, "tree-A");
+  assert.equal(d.state.coverage?.tree, "tree-0", "later diffs still start from the full run");
+  assert.equal(d.state.coverage?.selectedRuns, 1);
+});
+
+test("stopping again on a tree a partial run passed skips, unless a full run is due", async () => {
+  const state = { ...defaultState(), lastGreenTree: "tree-0", lastSelectedTree: "tree-A", coverage: map({ selectedRuns: 1 }) };
+  const skip = input({ state });
+  await decideStop(skip);
+  assert.deepEqual(skip.ran, []);
+
+  const due = input({ state: { ...state, coverage: map({ selectedRuns: 5 }) } });
+  const d = await decideStop(due);
+  assert.deepEqual(due.ran, [[C1, C2]]);
+  assert.deepEqual(due.recorded, [true]);
+  assert.equal(d.state.lastGreenTree, "tree-A");
+  assert.equal(d.state.coverage?.tree, "recorded");
+});
+
+test("a change to anything unmapped runs everything", async () => {
+  const i = input({ state: { ...defaultState(), coverage: map() }, changedSince: () => ["server.mjs"] });
+  await decideStop(i);
+  assert.deepEqual(i.ran, [[C1, C2]]);
+});
+
+test("forceAll runs everything even when a partial run would do", async () => {
+  const i = input({ state: { ...defaultState(), coverage: map() }, forceAll: true });
+  await decideStop(i);
+  assert.deepEqual(i.ran, [[C1, C2]]);
+});
+
+test("a failing partial run blocks and keeps the map", async () => {
+  const i = input({ state: { ...defaultState(), lastGreenTree: "tree-0", lastSelectedTree: "tree-B", coverage: map() } }, { [C2]: "failed" });
+  const d = await decideStop(i);
+  assert.equal(d.block, true);
+  assert.match(d.reason, /#2/);
+  assert.equal(d.state.lastSelectedTree, null);
+  assert.equal(d.state.lastGreenTree, null);
+  assert.deepEqual(d.state.coverage, map());
+});
+
+test("a failing full run doesn't replace the map: a failed check may have stopped before loading everything", async () => {
+  const i = input({ state: { ...defaultState(), coverage: map({ selectedRuns: 5 }) } }, { [C1]: "failed" });
+  const d = await decideStop(i);
+  assert.equal(d.block, true);
+  assert.deepEqual(d.state.coverage, map({ selectedRuns: 5 }));
+});
+
+test("a full run that couldn't record leaves no map", async () => {
+  const i = input({ runAll: async (checks) => ({ outcomes: checks.map((check) => ({ check, status: "passed" as const, message: "", screenshot: null })), coverage: null }) });
+  const d = await decideStop({ ...i, state: { ...defaultState(), coverage: map({ selectedRuns: 5 }) } });
+  assert.equal(d.state.coverage, null);
 });

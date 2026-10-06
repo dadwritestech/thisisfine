@@ -93,8 +93,11 @@ export function brokenForHuman(broken: Broken[], who = "Claude"): string {
   return `🔥 This is NOT fine. ${who} broke ${list}. Sent it back to fix.`;
 }
 
-export function fineMessage(kept: number, flaky: number[]): string {
-  const base = `☕ This is fine. ${kept}/${kept} promises kept`;
+/** `partial`: only the promises the change can affect ran, out of `of` active. */
+export function fineMessage(kept: number, flaky: number[], partial?: { of: number; why: string }): string {
+  const base = partial
+    ? `☕ This is fine. ${kept}/${kept} promise${kept === 1 ? "" : "s"} this change can affect kept (${partial.of - kept} others skipped: ${partial.why})`
+    : `☕ This is fine. ${kept}/${kept} promises kept`;
   if (flaky.length === 0) return `${base}.`;
   const which = flaky.map((n) => `#${n}`).join(", ");
   return `${base} (${which} ${flaky.length === 1 ? "was" : "were"} flaky: passed on retry).`;

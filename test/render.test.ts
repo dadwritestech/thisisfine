@@ -75,6 +75,13 @@ test("fine message counts kept promises and flags flaky ones", () => {
   assert.equal(fineMessage(3, [2]), "☕ This is fine. 3/3 promises kept (#2 was flaky: passed on retry).");
 });
 
+test("a partial run says how many it checked and why the rest were skipped", () => {
+  assert.equal(fineMessage(1, [], { of: 3, why: "only public/about.html changed" }),
+    "☕ This is fine. 1/1 promise this change can affect kept (2 others skipped: only public/about.html changed).");
+  assert.equal(fineMessage(2, [4], { of: 5, why: "only a.css changed" }),
+    "☕ This is fine. 2/2 promises this change can affect kept (3 others skipped: only a.css changed) (#4 was flaky: passed on retry).");
+});
+
 test("status text lists active, retired and pending", () => {
   const recs = [proposal({ proof: proven }), lock({ proof: proven }), proposal({ id: "p2", number: 2, sentence: "Empty cart disables checkout" }),
     lock({ proposal: "p2", number: 2, sentence: "Empty cart disables checkout", proof: unproven }),

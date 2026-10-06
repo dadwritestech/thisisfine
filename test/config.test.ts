@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { detectConfig, loadConfig, writeScaffold } from "../src/config.ts";
+import { pathToFileURL } from "node:url";
+import { DEFAULTS, detectConfig, loadConfig, writeScaffold } from "../src/config.ts";
 import { put, tempDir } from "./helpers.ts";
 
 function project(pkg: object): string {
@@ -51,4 +52,32 @@ test("loadConfig fills defaults and explains a missing config", () => {
   assert.throws(() => loadConfig(tempDir()), /thisisfine init/);
   put(root, ".thisisfine/config.json", JSON.stringify({ start: 42 }));
   assert.throws(() => loadConfig(root), /start/);
+});
+
+/** Evaluates the generated Playwright config with `defineConfig` as the identity, under `env`. */
+async function generatedConfig(env: Record<string, string>): Promise<Record<string, any>> {
+  const dir = tempDir();
+  writeScaffold(dir, { start: "npm start", ...DEFAULTS });
+  const source = readFileSync(join(dir, ".thisisfine", "playwright.config.mjs"), "utf8")
+    .replace(`import { defineConfig } from "@playwright/test";`, "const defineConfig = (c) => c;")
+    .replace("const env = process.env;", `const env = ${JSON.stringify(env)};`);
+  const file = join(dir, "evaluated.mjs");
+  writeFileSync(file, source);
+  return (await import(pathToFileURL(file).href)).default;
+}
+
+test("the generated config gives each recorded check its own project behind its own proxy", async () => {
+  const plain = await generatedConfig({});
+  assert.equal(plain.projects, undefined, "proofs and unrecorded runs are unchanged");
+
+  const cfg = await generatedConfig({ THISISFINE_PROXIES: JSON.stringify({ ".thisisfine/checks/1-badge.spec.ts": 5001, ".thisisfine/checks/sub/2-logo.spec.ts": 5002 }) });
+  assert.equal(cfg.projects.length, 2);
+  const [one, two] = cfg.projects;
+  assert.deepEqual(one.use, { proxy: { server: "http://127.0.0.1:5001" } });
+  assert.deepEqual(two.use, { proxy: { server: "http://127.0.0.1:5002" } });
+  assert.equal(one.testMatch.test("C:\\p\\.thisisfine\\checks\\1-badge.spec.ts"), true);
+  assert.equal(one.testMatch.test("/p/.thisisfine/checks/1-badge.spec.ts"), true);
+  assert.equal(one.testMatch.test("/p/.thisisfine/checks/11-badge.spec.ts"), false);
+  assert.equal(one.testMatch.test("/p/.thisisfine/checks/1-badgeXspec.ts"), false);
+  assert.equal(two.testMatch.test("/p/.thisisfine/checks/sub/2-logo.spec.ts"), true);
 });

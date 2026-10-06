@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { loadConfig, detectConfig, writeScaffold } from "./config.ts";
 import { decideStop } from "./gate.ts";
-import { changedSince, footprint, repoRoot, treeId } from "./git.ts";
+import type { RunResult } from "./gate.ts";
+import { changedPaths, changedSince, footprint, repoRoot, treeBlobs, treeId } from "./git.ts";
 import { decideGuard } from "./guard.ts";
 import { fileHash } from "./hash.ts";
 import { integrityProblems } from "./integrity.ts";
@@ -18,11 +19,14 @@ import { prove } from "./prove.ts";
 import { findRoot } from "./root.ts";
 import { nestedContext, pendingMessage, proofLine, sessionContext, shortDate, sideEffectWarning, statusText } from "./render.ts";
 import { restoredLedger } from "./restore.ts";
+import { startRecorder } from "./recorder.ts";
+import type { Recorder } from "./recorder.ts";
 import { pageErrors, runChecks, withoutLoadErrors } from "./runner.ts";
+import { buildCoverage, usesOwnHttp } from "./select.ts";
 import { homeDir, keyIdOf, loadOrCreateKey, verifyRecord } from "./sign.ts";
 import { loadState, saveState } from "./state.ts";
 import { verifyWords } from "./transcript.ts";
-import type { Agent, CheckOutcome, LedgerRecord, ProposalRecord, SignedRecord } from "./types.ts";
+import type { Agent, CheckOutcome, Coverage, LedgerRecord, ProposalRecord, SignedRecord } from "./types.ts";
 import { agentName, NESTED_AGENT_ENVS, PLAYWRIGHT_VERSION, STATE_DIR } from "./types.ts";
 
 const USAGE = `thisisfine: promises your coding agent can't quietly break.
@@ -91,26 +95,60 @@ function pruneRuns(root: string, keep = 10): void {
   }
 }
 
-/** Boot the app once and run these checks against it. */
-async function runAll(root: string, checks: string[], label: string): Promise<CheckOutcome[]> {
+/**
+ * Starts the recording proxies, or nothing if there is no git tree to map
+ * against or they won't start: a run that can't record is still a run.
+ */
+async function tryRecorder(root: string, tree: string | null, checks: string[]): Promise<Recorder | null> {
+  if (tree === null) return null;
+  try {
+    return await startRecorder(checks);
+  } catch {
+    return null;
+  }
+}
+
+/** What each check loaded, as a map of repo files; null if anything about recording went wrong. */
+async function mapOf(root: string, tree: string | null, checks: string[], rec: Recorder | null): Promise<Coverage | null> {
+  if (!rec || tree === null) return null;
+  try {
+    const hits = await rec.stop();
+    const ownHttp = checks.filter((c) => usesOwnHttp(readFileSync(join(root, c), "utf8")));
+    return buildCoverage({ tree, madeAt: new Date().toISOString(), blobs: treeBlobs(root, tree), hits, ownHttp });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Boot the app once and run these checks against it. With `record`, every
+ * check's browser goes through its own recording proxy, which is how the
+ * gate learns which files each promise touches.
+ */
+async function runAll(root: string, checks: string[], label: string, record: boolean, tree: string | null): Promise<RunResult> {
   const config = loadConfig(root);
   pruneRuns(root);
   const runDir = join(root, STATE_DIR, "runs", stamp(label));
+  const rec = record ? await tryRecorder(root, tree, checks) : null;
   const app = await startApp({
     cwd: root, start: config.start, readyPath: config.readyPath, readyTimeoutMs: config.readyTimeoutMs,
     logPath: join(runDir, "app.log")
   });
   try {
-    const outcomes = await runChecks({ root, checks, baseUrl: app.url, runDir, retries: 1, timeoutMs: config.checkTimeoutMs });
+    const outcomes = await runChecks({
+      root, checks, baseUrl: app.url, runDir, retries: 1, timeoutMs: config.checkTimeoutMs, ...(rec ? { proxies: rec.ports } : {})
+    });
+    const coverage = await mapOf(root, tree, checks, rec);
     const failed = outcomes.filter((o) => o.status === "failed" || o.status === "missing");
-    if (failed.length === 0) return outcomes;
+    if (failed.length === 0) return { outcomes, coverage };
     const errors = await pageErrors(root, app.url);
     for (const o of failed) {
       o.pageErrors = errors;
       if (o.checkErrors) o.checkErrors = withoutLoadErrors(o.checkErrors, errors);
     }
-    return outcomes;
+    return { outcomes, coverage };
   } finally {
+    await rec?.stop();
     await app.stop();
   }
 }
@@ -227,12 +265,14 @@ async function cmdCheck(): Promise<number> {
   const { records: all, readError } = readRecords(root);
   const state = loadState(root);
   const key = loadOrCreateKey();
+  const tree = safeTreeId(root);
   const d = await decideStop({
     records: all, readError, mirror: readMirror(root), key, keyId: keyIdOf(key), hashOf: hashOf(root),
-    treeId: safeTreeId(root), state: { ...state, lastGreenTree: null, lastBlockKey: null, consecutiveBlocks: 0 },
-    runAll: (checks) => runAll(root, checks, "check")
+    treeId: tree, state: { ...state, lastGreenTree: null, lastSelectedTree: null, lastBlockKey: null, consecutiveBlocks: 0 },
+    changedSince: (from) => (tree === null ? null : changedPaths(root, from, tree)), now: Date.now(), forceAll: true,
+    runAll: (checks, record) => runAll(root, checks, "check", record, tree)
   });
-  saveState(root, { ...state, lastGreenTree: d.state.lastGreenTree });
+  saveState(root, { ...state, lastGreenTree: d.state.lastGreenTree, lastSelectedTree: d.state.lastSelectedTree, coverage: d.state.coverage });
   if (d.block) {
     out(d.reason);
     return 1;
@@ -450,9 +490,12 @@ async function decideHook(name: string, input: HookInput, root: string): Promise
   // hook-stop
   const { records: all, readError } = readRecords(root);
   const key = loadOrCreateKey();
+  const tree = safeTreeId(root);
   const d = await decideStop({
     records: all, readError, mirror: readMirror(root), key, keyId: keyIdOf(key), hashOf: hashOf(root),
-    treeId: safeTreeId(root), state: loadState(root), runAll: (checks) => runAll(root, checks, "stop"),
+    treeId: tree, state: loadState(root), now: Date.now(),
+    changedSince: (from) => (tree === null ? null : changedPaths(root, from, tree)),
+    runAll: (checks, record) => runAll(root, checks, "stop", record, tree),
     who: agentName(agent)
   });
   saveState(root, d.state);

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { addWorktree, applyPatch, changedSince, defaultBase, footprint, prepareWorktree, removeWorktree, repoRoot, resolveRef, snapshotCommit, treeId } from "../src/git.ts";
+import { addWorktree, applyPatch, blobOf, changedPaths, changedSince, defaultBase, footprint, prepareWorktree, removeWorktree, repoRoot, resolveRef, snapshotCommit, treeBlobs, treeId } from "../src/git.ts";
 import { commitAll, initRepo, put, sh, tempDir } from "./helpers.ts";
 
 function repo(): string {
@@ -96,4 +96,28 @@ test("worktree add, prepare (copy + node_modules link), patch, remove", () => {
   assert.equal(existsSync(dir), false);
   assert.ok(existsSync(join(root, "node_modules/dep/index.js")), "linked node_modules survives removal");
   rmSync(join(root, "node_modules"), { recursive: true });
+});
+
+test("treeBlobs maps every blob in a tree to its paths, and blobOf hashes bytes the way git does", () => {
+  const root = repo();
+  put(root, "public/a.js", "same\n");
+  put(root, "public/b.js", "same\n");
+  const tree = treeId(root);
+  const blobs = treeBlobs(root, tree);
+  assert.deepEqual(blobs.get(blobOf(Buffer.from("same\n"))), ["public/a.js", "public/b.js"]);
+  assert.deepEqual(blobs.get(blobOf(Buffer.from("v1\n"))), ["app.js"]);
+  assert.equal(blobOf(Buffer.from("v1\n")), sh(root, "git", ["hash-object", "app.js"]));
+});
+
+test("changedPaths lists what differs between a tree and now; null when the old tree is gone", () => {
+  const root = repo();
+  put(root, "old name.js", "x\n");
+  const t1 = treeId(root);
+  put(root, "app.js", "v2\n");
+  rmSync(join(root, "old name.js"));
+  put(root, "new name.js", "x\n");
+  const t2 = treeId(root);
+  assert.deepEqual(changedPaths(root, t1, t2), ["app.js", "new name.js", "old name.js"], "renames show both sides");
+  assert.deepEqual(changedPaths(root, t1, t1), []);
+  assert.equal(changedPaths(root, "0123456789abcdef0123456789abcdef01234567", t2), null);
 });
