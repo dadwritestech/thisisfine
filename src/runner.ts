@@ -134,6 +134,8 @@ export interface RunOptions {
   timeoutMs: number;
   /** "on" for proofs, so the human can see what they are locking. */
   screenshot?: "on" | "only-on-failure";
+  /** check → recording proxy port: each check gets its own Playwright project behind it. */
+  proxies?: Record<string, number>;
 }
 
 /**
@@ -165,6 +167,7 @@ export async function runChecks(opts: RunOptions): Promise<CheckOutcome[]> {
         THISISFINE_RETRIES: String(opts.retries),
         THISISFINE_TIMEOUT: String(opts.timeoutMs),
         THISISFINE_SCREENSHOT: opts.screenshot ?? "only-on-failure",
+        ...(opts.proxies ? { THISISFINE_PROXIES: JSON.stringify(opts.proxies) } : {}),
         FORCE_COLOR: "0"
       }
     }, (_err, stdout, stderr) => resolve(`${stdout}\n${stderr}`));

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { copyFileSync, cpSync, existsSync, lstatSync, rmdirSync, rmSync, statSync, symlinkSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -167,5 +167,34 @@ export function applyPatch(dir: string, patchPath: string): void {
     git(dir, ["apply", "--recount", "--whitespace=nowarn", resolve(patchPath)]);
   } catch (err) {
     throw new Error(`sabotage patch does not apply: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/** The id git gives these bytes as a blob: sha1 over a "blob <size>\0" header and the content. */
+export function blobOf(bytes: Buffer): string {
+  return createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex");
+}
+
+/** Every blob in `tree` → the root-relative paths that hold it, sorted. */
+export function treeBlobs(root: string, tree: string): Map<string, string[]> {
+  const blobs = new Map<string, string[]>();
+  for (const entry of gitRaw(root, ["ls-tree", "-r", "-z", tree]).split("\0")) {
+    const m = /^\d+ blob ([0-9a-f]+)\t(.+)$/s.exec(entry);
+    if (!m) continue;
+    blobs.set(m[1]!, [...(blobs.get(m[1]!) ?? []), m[2]!].sort());
+  }
+  return blobs;
+}
+
+/**
+ * Paths that differ between two trees, renames as delete + add, sorted.
+ * Null when git can't say (an old tree garbage-collected): the caller must
+ * treat "don't know" as "everything changed".
+ */
+export function changedPaths(root: string, from: string, to: string): string[] | null {
+  try {
+    return gitRaw(root, ["diff", "--name-only", "--no-renames", "-z", from, to]).split("\0").filter(Boolean).sort();
+  } catch {
+    return null;
   }
 }

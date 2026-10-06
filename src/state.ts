@@ -6,7 +6,7 @@ import type { State } from "./types.ts";
 
 /** Start "due" for a nudge, so the first approval of a session can prompt one. */
 export function defaultState(): State {
-  return { lastGreenTree: null, promptsSinceNudge: 5, lastBlockKey: null, consecutiveBlocks: 0 };
+  return { lastGreenTree: null, lastSelectedTree: null, coverage: null, promptsSinceNudge: 5, lastBlockKey: null, consecutiveBlocks: 0 };
 }
 
 /**

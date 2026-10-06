@@ -117,9 +117,30 @@ export interface CheckOutcome {
   pageErrors?: string[];
 }
 
+/**
+ * Which promise loaded which file, from the last full green run. A file is
+ * mapped to a check only when a response the check received was that file,
+ * byte for byte, in tree `tree`. `dynamic` checks also got something no
+ * file explains (an API, server-rendered HTML), so they depend on code we
+ * can't see and run whenever anything runs.
+ */
+export interface Coverage {
+  tree: string;
+  madeAt: string;
+  checks: string[];
+  files: Record<string, string[]>;
+  dynamic: string[];
+  /** Partial runs since the map was made; enough of them forces a full one. */
+  selectedRuns: number;
+}
+
 /** Local, uncommitted bookkeeping. Losing it only costs speed and nudges. */
 export interface State {
+  /** The last tree on which *every* promise passed. */
   lastGreenTree: string | null;
+  /** The last tree on which the promises a change could affect passed. */
+  lastSelectedTree: string | null;
+  coverage: Coverage | null;
   promptsSinceNudge: number;
   lastBlockKey: string | null;
   consecutiveBlocks: number;
