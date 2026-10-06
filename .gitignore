@@ -3,3 +3,4 @@ node_modules/
 .thisisfine/runs/
 .e2e-out/
 dist/
+marketing/
