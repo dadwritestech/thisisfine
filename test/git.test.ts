@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { addWorktree, applyPatch, blobOf, changedPaths, changedSince, defaultBase, fileAtRef, footprint, prepareWorktree, removeWorktree, repoRoot, resolveRef, snapshotCommit, treeBlobs, treeId } from "../src/git.ts";
 import { commitAll, initRepo, put, sh, tempDir } from "./helpers.ts";
 
@@ -16,7 +16,9 @@ function repo(): string {
 test("repoRoot finds the top level from a subdirectory", () => {
   const root = repo();
   put(root, "sub/x.txt", "x");
-  assert.equal(repoRoot(join(root, "sub"))?.toLowerCase(), resolve(root).toLowerCase());
+  // realpath.native expands 8.3 short names (RUNNER~1) that a temp dir can carry; git reports long ones.
+  const long = (p: string) => realpathSync.native(p).toLowerCase();
+  assert.equal(long(repoRoot(join(root, "sub"))!), long(root));
   assert.equal(repoRoot(tempDir()), null);
 });
 
