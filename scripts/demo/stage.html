@@ -1,0 +1,193 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- The stage the demo is filmed on. build.ts drives it scene by scene and screenshots every frame. -->
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 960px; height: 600px; overflow: hidden; }
+  body {
+    background: linear-gradient(#2b1d12, #3d2716);
+    font-family: "Segoe UI", system-ui, sans-serif; color: #fff8ef;
+    display: flex; flex-direction: column; padding: 18px 28px 22px;
+  }
+  header { display: flex; align-items: center; gap: 12px; height: 44px; flex: none; }
+  header svg { width: 38px; height: 38px; }
+  .mark { font-weight: 800; font-size: 22px; letter-spacing: -0.5px; }
+  .mark span { color: #ffb347; }
+  #caption { margin-left: auto; font-size: 17px; color: #e8dccb; }
+  #caption b { color: #ffb347; font-weight: 700; margin-right: 6px; }
+  main { flex: 1; position: relative; margin-top: 12px; }
+  .scene { position: absolute; inset: 0; display: none; }
+  .scene.on { display: flex; }
+
+  /* terminal */
+  .window { flex: 1; display: flex; flex-direction: column; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px #0008; }
+  .bar { height: 30px; flex: none; background: #4a3220; display: flex; align-items: center; padding: 0 12px; gap: 7px; font-size: 13px; color: #d8c8b4; }
+  .bar i { width: 11px; height: 11px; border-radius: 50%; background: #6b4c34; display: inline-block; }
+  .bar .title { margin-left: 10px; }
+  #term {
+    flex: 1; background: #17100a; padding: 12px 16px; overflow: hidden;
+    font: 13.5px/1.4 "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace, "Segoe UI Emoji", "Noto Color Emoji";
+    white-space: pre-wrap; overflow-wrap: anywhere; color: #e8dccb;
+  }
+  #term > span { display: block; }
+  .ok, .no { font-family: "Segoe UI Symbol", "DejaVu Sans", sans-serif; }
+  .ok { color: #6fdc7f; }
+  .emoji { font-size: 1.3em; line-height: 1; vertical-align: -0.1em; }
+  .no { color: #ff6b5a; }
+  #verdict .ok, #verdict .no { color: inherit; }
+  #term .you { color: #fff8ef; background: #2c1f14; margin: 6px -16px 6px; padding: 3px 16px; }
+  #term .you::before { content: "> "; color: #ffb347; }
+  #term .claude::before { content: "● "; color: #fff8ef; }
+  #term .tool { color: #fff8ef; font-weight: 700; }
+  #term .tool::before { content: "● "; color: #6fcf6f; }
+  #term .out { color: #b9a892; padding-left: 2.2ch; }
+  #term .out.first { text-indent: -2.2ch; }
+  #term .out.first::before { content: "⎿ "; }
+  #term .del { color: #ff8b80; background: #3a1512; display: block; }
+  #term .add { color: #9be59b; background: #13301a; display: block; }
+  #term .hook { font-size: 15px; margin: 3px 0; padding: 4px 10px; border-left: 3px solid #ffb347; background: #2a1c10; color: #fff8ef; }
+  #term .hook.bad { border-color: #ff4d00; background: #3a160a; }
+  #term .hook .who { color: #a8957e; margin-right: 1ch; }
+  #term .block { display: block; color: #ffc9b8; padding-left: 2.2ch; }
+  #term .dim { color: #8a7865; }
+  #term .cursor { display: inline-block; width: 0.6em; background: #ffb347; animation: none; }
+
+  /* browser */
+  #browser .window { background: #fff8ef; }
+  #browser .url { margin-left: 14px; flex: 1; max-width: 420px; height: 20px; border-radius: 10px; background: #2b1d12; color: #e8dccb; padding: 0 12px; font-size: 12px; line-height: 20px; }
+  #shot { width: 100%; display: block; }
+  #zoom {
+    position: absolute; right: 26px; bottom: 26px; width: 300px; height: 140px; border-radius: 12px;
+    background-repeat: no-repeat; border: 4px solid #2b1d12; outline: 3px solid #ffb347;
+  }
+  #verdict { position: absolute; left: 26px; bottom: 30px; font-size: 30px; font-weight: 800; padding: 10px 18px; border-radius: 12px; outline: 3px solid #2b1d12; }
+  #verdict.good { background: #1f5130; color: #e6ffe9; }
+  #verdict.bad { background: #7a1d0c; color: #fff1ea; }
+
+  /* cards */
+  body.carded header { visibility: hidden; }
+  #card { flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 18px; }
+  #card .big { font-size: 64px; font-weight: 800; letter-spacing: -1.5px; }
+  #card .big span { color: #ffb347; }
+  #card p { font-size: 22px; color: #e8dccb; max-width: 760px; }
+  #card code { font: 18px "Cascadia Mono", Consolas, monospace; background: #17100a; color: #fff8ef; padding: 10px 16px; border-radius: 8px; display: block; text-align: left; white-space: pre; }
+  #card svg { width: 150px; height: 150px; }
+
+  .flames { position: absolute; left: 0; right: 0; bottom: 0; height: 60px; pointer-events: none; }
+</style>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="flame" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#ff4d00"/><stop offset="0.6" stop-color="#ff9a1f"/><stop offset="1" stop-color="#ffd166"/>
+    </linearGradient>
+    <!-- the mug from docs/img/banner.svg -->
+    <symbol id="mug" viewBox="20 -20 245 260">
+      <g fill="none" stroke="#fff8ef" stroke-width="7" stroke-linecap="round" opacity="0.55">
+        <path d="M70 40 C55 22 85 12 70 -8"/><path d="M110 40 C95 22 125 12 110 -8"/><path d="M150 40 C135 22 165 12 150 -8"/>
+      </g>
+      <path d="M30 60 H190 V170 C190 205 160 230 125 230 H95 C60 230 30 205 30 170 Z" fill="#fff8ef"/>
+      <path d="M190 85 H215 C245 85 255 115 245 140 C238 158 220 165 190 165" fill="none" stroke="#fff8ef" stroke-width="16"/>
+      <rect x="30" y="60" width="160" height="16" fill="#e8dccb"/>
+      <g transform="translate(110 150)">
+        <path d="M-20 -12 V-30 C-20 -45 20 -45 20 -30 V-12" fill="none" stroke="#2b1d12" stroke-width="8"/>
+        <rect x="-30" y="-14" width="60" height="48" rx="8" fill="#ff6a00"/>
+        <circle cx="0" cy="6" r="7" fill="#2b1d12"/><rect x="-3" y="8" width="6" height="14" fill="#2b1d12"/>
+      </g>
+    </symbol>
+  </defs>
+</svg>
+
+<header>
+  <svg><use href="#mug"/></svg>
+  <div class="mark">this<span>is</span>fine</div>
+  <div id="caption"></div>
+</header>
+<main>
+  <section class="scene" id="terminal">
+    <div class="window">
+      <div class="bar"><i></i><i></i><i></i><span class="title">claude · ~/fine-coffee-co</span></div>
+      <div id="term"></div>
+    </div>
+  </section>
+  <section class="scene" id="browser">
+    <div class="window">
+      <div class="bar"><i></i><i></i><i></i><span class="url">localhost:3000 · Fine Coffee Co.</span></div>
+      <img id="shot" alt="">
+    </div>
+    <div id="zoom"></div>
+    <div id="verdict"></div>
+  </section>
+  <section class="scene" id="card"></section>
+</main>
+<svg class="flames" id="flames" viewBox="0 0 960 60" preserveAspectRatio="none" style="display:none">
+  <g fill="url(#flame)" opacity="0.9">
+    <path d="M30 60 C22 40 46 30 42 12 C62 30 74 42 62 60 Z"/>
+    <path d="M96 60 C84 44 104 36 102 22 C120 38 128 48 120 60 Z"/>
+    <path d="M820 60 C812 42 832 32 828 14 C850 32 860 46 848 60 Z"/>
+    <path d="M884 60 C872 40 900 30 894 8 C920 30 930 46 916 60 Z"/>
+  </g>
+</svg>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const term = $("term");
+  let pinned = null;
+
+  /** Keep the newest line in view, or keep a pinned line at the top while the rest overflows below. */
+  function scroll() {
+    term.scrollTop = pinned
+      ? pinned.getBoundingClientRect().top - term.getBoundingClientRect().top + term.scrollTop - 8
+      : term.scrollHeight;
+  }
+  /** Text with ✔ and ✘ as coloured symbols (not emoji), and real emoji a little larger so they read at GIF size. */
+  function text(into, s) {
+    for (const piece of s.split(/([✔✘]|\p{Extended_Pictographic})/u)) {
+      if (!piece) continue;
+      const cls = piece === "✔" ? "ok" : piece === "✘" ? "no" : /\p{Extended_Pictographic}/u.test(piece) ? "emoji" : "";
+      if (!cls) { into.append(piece); continue; }
+      const m = document.createElement("span"); m.className = cls; m.textContent = piece; into.append(m);
+    }
+  }
+
+  window.stage = {
+    /** One terminal line from [class, text] parts. */
+    line(cls, parts) {
+      const el = document.createElement("span");
+      el.className = cls;
+      for (const [c, t] of typeof parts === "string" ? [["", parts]] : parts) {
+        const s = document.createElement("span"); s.className = c; text(s, t); el.append(s);
+      }
+      term.append(el);
+      scroll();
+      return term.children.length - 1;
+    },
+    typing(sofar, done) {
+      let el = $("typing");
+      if (!el) { el = document.createElement("span"); el.className = "you"; el.id = "typing"; term.append(el); }
+      el.textContent = sofar;
+      if (done) el.removeAttribute("id");
+      else { const c = document.createElement("span"); c.className = "cursor"; c.textContent = " "; el.append(c); }
+      scroll();
+    },
+    pin(index) { pinned = index === null ? null : term.children[index]; scroll(); },
+    clear() { term.textContent = ""; pinned = null; },
+    caption(html) { $("caption").innerHTML = html; },
+    scene(id, flames) {
+      for (const s of document.querySelectorAll(".scene")) s.classList.toggle("on", s.id === id);
+      $("flames").style.display = flames ? "" : "none";
+      document.body.classList.toggle("carded", id === "card");
+    },
+    card(html) { $("card").innerHTML = html; },
+    async shop(src, verdict, good) {
+      $("shot").src = src;
+      // The cart badge sits in the top-right corner of the 1280×720 shop screenshot: show it at 2.5×.
+      const zoom = $("zoom");
+      zoom.style.backgroundImage = `url(${src})`;
+      zoom.style.backgroundSize = `${1280 * 2.5}px auto`;
+      zoom.style.backgroundPosition = `${-1140 * 2.5}px 0`;
+      const v = $("verdict"); v.className = good ? "good" : "bad"; v.textContent = ""; text(v, verdict);
+      await $("shot").decode();
+    }
+  };
+</script>

@@ -9,6 +9,10 @@
 </p>
 
 <p align="center">
+  <img src="docs/img/demo.gif" alt="Demo, recorded from a real end-to-end run. You ask Claude for a cart badge; thisisfine proves the check passes now and fails without the change, and the shop shows the badge at 2. You reply 'y, perfect' and promise #1 is locked. Weeks later a 'small cleanup' makes the badge count distinct products, Claude tries to stop and is blocked with '🔥 This is NOT fine', Expected 2, Received 1, and the shop shows the badge at 1. Claude's attempt to edit the check is denied, it fixes the app instead, and the turn ends with '☕ This is fine. 1/1 promises kept.'" width="100%">
+</p>
+
+<p align="center">
   <a href="#install">Install</a> ·
   <a href="#the-30-second-story">The 30-second story</a> ·
   <a href="#how-it-works">How it works</a> ·
@@ -191,6 +195,12 @@ The end-to-end test installs Playwright and drives a real browser through the wh
 
 ```bash
 THISISFINE_E2E=1 npm run test:e2e
+```
+
+The demo GIF at the top is filmed from that run: every line of thisisfine output in it, and both shop screenshots, come from the test. To re-film it:
+
+```bash
+npm run demo
 ```
 
 ## License
