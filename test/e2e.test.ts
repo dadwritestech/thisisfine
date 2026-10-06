@@ -124,7 +124,16 @@ test("a shop, a badge, a yes, a refactor: thisisfine catches it", { skip: proces
   const crashed = hook("06b-hook-stop-crashed", "hook-stop");
   assert.equal(crashed.json().decision, "block", crashed.stdout);
   assert.match(crashed.json().reason, /The page threw while loading:\n +SyntaxError[^\n]*app\.js:\d+/, crashed.stdout);
+  assert.doesNotMatch(crashed.json().reason, /during the check/, "the check's own trace saw the same SyntaxError: said once");
   edit("public/app.js", "String(new Set(cart).size", "String(new Set(cart).size)");
+
+  // 8c. The page loads fine but the click handler throws: the gate names that error, file and line, from the check's own run.
+  edit("public/app.js", "String(new Set(cart).size)", "String(cart.count.toFixed())");
+  const thrown = hook("06c-hook-stop-click-throws", "hook-stop");
+  assert.equal(thrown.json().decision, "block", thrown.stdout);
+  assert.match(thrown.json().reason, /The page threw during the check:\n +TypeError: Cannot read properties of undefined \(reading 'toFixed'\) \(\/app\.js:\d+:\d+\)/, thrown.stdout);
+  assert.doesNotMatch(thrown.json().reason, /while loading/, "nothing threw on load");
+  edit("public/app.js", "String(cart.count.toFixed())", "String(new Set(cart).size)");
 
   // 9. Claude fixes the app (not the check), and the turn can end.
   edit("public/app.js", "String(new Set(cart).size)", "String(cart.length)");

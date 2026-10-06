@@ -54,6 +54,22 @@ test("a page that throws on load says so before the assertion, so the long call 
   assert.doesNotMatch(brokenForAgent([{ promise: p, outcome: { ...outcome, pageErrors: [] } }]), /page threw/);
 });
 
+test("errors thrown while the check ran come after load errors and before the assertion, capped", () => {
+  const p = foldPromises([proposal(), lock()]).get(1)!;
+  const outcome = { check: p.check, status: "failed" as const, message: `Expected: "2"\nReceived: "0"`, screenshot: null,
+    pageErrors: ["SyntaxError: Unexpected token ')' (/vendor.js:4:2)"],
+    checkErrors: Array.from({ length: 8 }, (_, i) => `TypeError: boom ${i} (/app.js:${i + 1}:5)`) };
+  const agent = brokenForAgent([{ promise: p, outcome }]);
+  assert.match(agent, /The page threw while loading:\n +SyntaxError[^\n]*\n +The page threw during the check:\n +TypeError: boom 0 \(\/app\.js:1:5\)/);
+  assert.ok(agent.indexOf("during the check") < agent.indexOf("Received"), "before the assertion");
+  assert.match(agent, /boom 4/);
+  assert.doesNotMatch(agent, /boom 5/);
+  assert.match(agent, /\(and 3 more\)/);
+  const onlyDuring = brokenForAgent([{ promise: p, outcome: { ...outcome, pageErrors: [], checkErrors: ["TypeError: boom (/app.js:3:60)"] } }]);
+  assert.doesNotMatch(onlyDuring, /while loading|more\)/);
+  assert.match(onlyDuring, /The page threw during the check:\n +TypeError: boom/);
+});
+
 test("fine message counts kept promises and flags flaky ones", () => {
   assert.equal(fineMessage(14, []), "☕ This is fine. 14/14 promises kept.");
   assert.equal(fineMessage(3, [2]), "☕ This is fine. 3/3 promises kept (#2 was flaky: passed on retry).");

@@ -62,12 +62,19 @@ function indent(text: string, by = "   "): string {
 }
 
 /** Stop-hook `reason`: read by the agent, which must keep working. */
+/** A page stuck in an error loop must not bury the assertion. */
+function capped(errors: string[], max = 5): string {
+  const more = errors.length - max;
+  return [...errors.slice(0, max), ...(more > 0 ? [`(and ${more} more)`] : [])].join("\n");
+}
+
 export function brokenForAgent(broken: Broken[]): string {
   const parts = broken.map(({ promise: p, outcome: o }) => {
     const lines = [`🔥 This is NOT fine. You broke promise #${p.number} "${p.sentence}".`,
       `   The human confirmed it ${quoteHuman(p)}`, `   Check: ${p.check}`];
     // before the failure: Playwright's call log can fill the whole indent cap
-    if (o.pageErrors?.length) lines.push("   The page threw while loading:", indent(o.pageErrors.slice(0, 5).join("\n"), "     "));
+    if (o.pageErrors?.length) lines.push("   The page threw while loading:", indent(capped(o.pageErrors), "     "));
+    if (o.checkErrors?.length) lines.push("   The page threw during the check:", indent(capped(o.checkErrors), "     "));
     if (o.status === "missing") lines.push("   The check produced no result (deleted, renamed, or it no longer compiles).");
     else if (o.message) lines.push("   Failure:", indent(o.message, "     "));
     if (o.screenshot) lines.push(`   Screenshot: ${o.screenshot}`);

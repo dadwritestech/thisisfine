@@ -17,7 +17,7 @@ import { activePromises, foldPromises, nextNumber } from "./promises.ts";
 import { prove } from "./prove.ts";
 import { pendingMessage, proofLine, sessionContext, shortDate, sideEffectWarning, statusText } from "./render.ts";
 import { restoredLedger } from "./restore.ts";
-import { pageErrors, runChecks } from "./runner.ts";
+import { pageErrors, runChecks, withoutLoadErrors } from "./runner.ts";
 import { homeDir, keyIdOf, loadOrCreateKey, verifyRecord } from "./sign.ts";
 import { loadState, saveState } from "./state.ts";
 import { verifyWords } from "./transcript.ts";
@@ -113,7 +113,10 @@ async function runAll(root: string, checks: string[], label: string): Promise<Ch
     const failed = outcomes.filter((o) => o.status === "failed" || o.status === "missing");
     if (failed.length === 0) return outcomes;
     const errors = await pageErrors(root, app.url);
-    for (const o of failed) o.pageErrors = errors;
+    for (const o of failed) {
+      o.pageErrors = errors;
+      if (o.checkErrors) o.checkErrors = withoutLoadErrors(o.checkErrors, errors);
+    }
     return outcomes;
   } finally {
     await app.stop();

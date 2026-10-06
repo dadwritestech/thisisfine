@@ -115,6 +115,8 @@ export interface CheckOutcome {
   screenshot: string | null;
   /** What the page threw while loading; only looked up when a check failed. */
   pageErrors?: string[];
+  /** What the page threw while the check ran (e.g. in a click handler), from the failed run's trace. */
+  checkErrors?: string[];
 }
 
 /** Local, uncommitted bookkeeping. Losing it only costs speed and nudges. */

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { parseReport } from "../src/runner.ts";
+import { parseReport, playwrightArgs, withoutLoadErrors } from "../src/runner.ts";
 
 const root = join("D:", "proj");
 const result = (status: string, extra: object = {}) => ({ status, retry: 0, errors: [], attachments: [], ...extra });
@@ -64,4 +64,31 @@ test("a failure shows the code around the failing line, so the agent knows which
   assert.match(out!.message, /Received: "light"/);
   assert.match(out!.message, /await page\.reload\(\);\n> 20 \|/);
   assert.equal(out!.message.match(/> 20 \|/g)?.length, 1, "error and errors[0] are the same failure: shown once");
+});
+
+test("a failed check carries what the page threw during it, read from that run's trace", () => {
+  const trace = join(import.meta.dirname, "fixtures", "click-error.trace.zip");
+  const failed = { suites: [{ title: "1-cart.spec.ts", file: "1-cart.spec.ts", suites: [],
+    specs: [spec("Badge counts clicks", "unexpected", [result("failed", {
+      error: { message: "Expected: \"1\"\nReceived: \"0\"" },
+      attachments: [{ name: "trace", contentType: "application/zip", path: trace }]
+    })])] }] };
+  const [out] = parseReport(failed, root, [".thisisfine/checks/1-cart.spec.ts"]);
+  assert.ok(out!.checkErrors?.some((e) => e === "TypeError: Cannot read properties of undefined (reading 'length') (/app.js:3:60)"), String(out!.checkErrors));
+  const [passed] = parseReport(report, root, [".thisisfine/checks/1-badge.spec.ts"]);
+  assert.equal(passed!.checkErrors, undefined, "only failures are looked into");
+});
+
+test("Playwright keeps a trace of every failing check, whatever the project's config says", () => {
+  const args = playwrightArgs("cli.js", [".thisisfine/checks/1-a.spec.ts"]);
+  assert.deepEqual(args.slice(0, 3), ["cli.js", "test", "checks/1-a.spec.ts"]);
+  assert.deepEqual(args.slice(args.indexOf("--trace"), args.indexOf("--trace") + 2), ["--trace", "retain-on-failure"]);
+});
+
+test("errors the load-time probe already named are not repeated as thrown during the check", () => {
+  const load = ["SyntaxError: Unexpected token ';' (/bad.js:1:12)", "ReferenceError: x is not defined (/app.js:1:1)"];
+  const during = ["SyntaxError: Unexpected token ';'", "ReferenceError: x is not defined (/app.js:1:1)",
+    "ReferenceError: x is not defined (/app.js:9:1)", "TypeError: boom (/app.js:3:60)"];
+  assert.deepEqual(withoutLoadErrors(during, load), ["ReferenceError: x is not defined (/app.js:9:1)", "TypeError: boom (/app.js:3:60)"]);
+  assert.deepEqual(withoutLoadErrors(during, []), during);
 });

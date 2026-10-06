@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
+import { traceErrors } from "./trace.ts";
 import type { CheckOutcome } from "./types.ts";
 import { STATE_DIR } from "./types.ts";
 
@@ -33,6 +34,7 @@ interface FileTally {
   statuses: string[];
   message: string;
   screenshot: string | null;
+  checkErrors?: string[];
 }
 
 function toCheck(file: string): string {
@@ -65,6 +67,8 @@ function collect(suite: PwSuite, root: string, into: Map<string, FileTally>): vo
       const failed = (t.results ?? []).find((r) => r.status !== "passed" && r.status !== "skipped");
       if (!failed) continue;
       tally.message = failureMessage(failed) || `test ${failed.status}`;
+      const trace = (failed.attachments ?? []).find((a) => a.name === "trace" && a.path);
+      if (trace?.path) tally.checkErrors = traceErrors(trace.path);
       const shot = (failed.attachments ?? []).find((a) => a.name === "screenshot" && a.path);
       if (shot?.path) tally.screenshot = relative(root, shot.path).replace(/\\/g, "/");
     }
@@ -98,7 +102,9 @@ export function parseReport(report: unknown, root: string, checks: string[]): Ch
       const message = (related.length ? related : globalErrors).join("\n").slice(0, 2000) || "Playwright reported no result for this check.";
       return { check, status: "missing", message, screenshot: null };
     }
-    if (t.statuses.includes("unexpected")) return { check, status: "failed", message: t.message, screenshot: t.screenshot };
+    if (t.statuses.includes("unexpected")) {
+      return { check, status: "failed", message: t.message, screenshot: t.screenshot, ...(t.checkErrors ? { checkErrors: t.checkErrors } : {}) };
+    }
     if (t.statuses.every((s) => s === "skipped")) return { check, status: "missing", message: "Every test in this check was skipped.", screenshot: null };
     if (t.statuses.includes("flaky")) return { check, status: "flaky", message: "", screenshot: null };
     return { check, status: "passed", message: "", screenshot: t.screenshot };
@@ -125,6 +131,25 @@ export async function pageErrors(root: string, baseUrl: string): Promise<string[
   return [...new Set(errors)];
 }
 
+const located = / \([^()]*:\d+:\d+\)$/;
+
+/**
+ * A check's trace also sees the load its own `page.goto` triggers, so a
+ * broken script shows up twice: from the probe with its line, and from the
+ * trace with none (see traceErrors). Keep only what the probe didn't say.
+ */
+export function withoutLoadErrors(during: string[], load: string[]): string[] {
+  return during.filter((e) => !load.some((l) => l === e || (!located.test(e) && l.replace(located, "") === e)));
+}
+
+/**
+ * `--trace` beats `use.trace` in any config, so projects whose config is
+ * already frozen by a lock get traces too. Only failures keep theirs.
+ */
+export function playwrightArgs(cli: string, checks: string[]): string[] {
+  return [cli, "test", ...checks.map((c) => c.slice(STATE_DIR.length + 1)), "--config", "playwright.config.mjs", "--trace", "retain-on-failure"];
+}
+
 export interface RunOptions {
   root: string;
   checks: string[];
@@ -149,7 +174,7 @@ export async function runChecks(opts: RunOptions): Promise<CheckOutcome[]> {
   mkdirSync(opts.runDir, { recursive: true });
   const reportPath = join(opts.runDir, "report.json");
   rmSync(reportPath, { force: true });
-  const args = [cli, "test", ...opts.checks.map((c) => c.slice(STATE_DIR.length + 1)), "--config", "playwright.config.mjs"];
+  const args = playwrightArgs(cli, opts.checks);
   const budget = opts.checks.length * opts.timeoutMs * (opts.retries + 1) + 120_000;
   const output = await new Promise<string>((resolve) => {
     execFile(process.execPath, args, {
