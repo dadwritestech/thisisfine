@@ -5,10 +5,31 @@
   "type": "module",
   "license": "MIT",
   "author": "dadwritestech",
-  "bin": { "thisisfine": "./bin/thisisfine.mjs" },
-  "engines": { "node": ">=22.18" },
-  "files": ["bin", "dist", "hooks", "commands", "skills", ".claude-plugin", "examples"],
-  "keywords": ["claude-code", "plugin", "playwright", "regression", "ai-agents", "testing"],
+  "bin": {
+    "thisisfine": "./bin/thisisfine.mjs"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "hooks",
+    "commands",
+    "skills",
+    ".claude-plugin",
+    "examples",
+    "integrations"
+  ],
+  "keywords": [
+    "claude-code",
+    "plugin",
+    "playwright",
+    "regression",
+    "ai-agents",
+    "testing",
+    "pi-package"
+  ],
   "scripts": {
     "build": "node scripts/build.mjs",
     "prepack": "npm run build",
@@ -20,5 +41,16 @@
   "devDependencies": {
     "typescript": "^5.7.0",
     "@types/node": "^22.7.0"
+  },
+  "pi": {
+    "extensions": [
+      "./integrations/pi/index.ts"
+    ],
+    "skills": [
+      "./skills"
+    ],
+    "prompts": [
+      "./commands"
+    ]
   }
 }

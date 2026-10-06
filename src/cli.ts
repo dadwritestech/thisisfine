@@ -15,14 +15,15 @@ import { appendMirror, mirrorCheckContent, readMirror } from "./mirror.ts";
 import { decidePrompt, newProposalId } from "./prompt.ts";
 import { activePromises, foldPromises, nextNumber } from "./promises.ts";
 import { prove } from "./prove.ts";
-import { pendingMessage, proofLine, sessionContext, shortDate, sideEffectWarning, statusText } from "./render.ts";
+import { findRoot } from "./root.ts";
+import { nestedContext, pendingMessage, proofLine, sessionContext, shortDate, sideEffectWarning, statusText } from "./render.ts";
 import { restoredLedger } from "./restore.ts";
 import { pageErrors, runChecks, withoutLoadErrors } from "./runner.ts";
 import { homeDir, keyIdOf, loadOrCreateKey, verifyRecord } from "./sign.ts";
 import { loadState, saveState } from "./state.ts";
 import { verifyWords } from "./transcript.ts";
-import type { CheckOutcome, LedgerRecord, ProposalRecord, SignedRecord } from "./types.ts";
-import { PLAYWRIGHT_VERSION, STATE_DIR } from "./types.ts";
+import type { Agent, CheckOutcome, LedgerRecord, ProposalRecord, SignedRecord } from "./types.ts";
+import { agentName, NESTED_AGENT_ENVS, PLAYWRIGHT_VERSION, STATE_DIR } from "./types.ts";
 
 const USAGE = `thisisfine: promises your coding agent can't quietly break.
 
@@ -38,7 +39,7 @@ Usage: thisisfine <command>
   verify                       audit signatures, check files, and the human's words
   restore                      put back exactly what the human confirmed
 
-Hooks (run by Claude Code, not by hand): hook-session, hook-prompt, hook-guard, hook-stop
+Hooks (run by Claude Code or the pi extension, not by hand): hook-session, hook-prompt, hook-guard, hook-stop
 `;
 
 class UsageError extends Error {}
@@ -52,16 +53,7 @@ export function cliCommand(): string {
   return `node "${bin.replace(/\\/g, "/")}"`;
 }
 
-/** The nearest directory with `.thisisfine/config.json`. Not just `.thisisfine/`: that's also the name of the home dir. */
-export function findRoot(cwd: string): string | null {
-  let dir = resolve(cwd);
-  for (;;) {
-    if (existsSync(join(dir, STATE_DIR, "config.json"))) return dir;
-    const up = dirname(dir);
-    if (up === dir) return null;
-    dir = up;
-  }
-}
+export { findRoot };
 
 function requireRoot(): string {
   const root = findRoot(process.cwd());
@@ -290,9 +282,11 @@ function cmdVerify(): number {
       out(`  ✖ ${what}: signature doesn't match`);
       continue;
     }
-    const words = verifyWords(r.transcriptPath, r.promptId, r.words);
+    const words = verifyWords(r.transcriptPath, r.promptId, r.words, r.agent, r.kind === "lock" ? r.confirmedAt : r.retiredAt);
     const note = {
-      verified: "✔ signed, and the transcript shows a human typing those words",
+      verified: r.agent === "pi"
+        ? "✔ signed, and pi's session file has those words as that prompt (pi doesn't record who typed them)"
+        : "✔ signed, and the transcript shows a human typing those words",
       missing: "✔ signed (the session transcript is gone, so the words can't be re-checked)",
       "not-human": "✖ signed, but in the transcript those words didn't come from a human",
       "not-found": "✖ signed, but the transcript has no such prompt"
@@ -354,6 +348,8 @@ function cmdRestore(): number {
 // ── hooks ───────────────────────────────────────────────────────────────
 
 interface HookInput {
+  /** Absent for Claude Code; "pi" from the pi extension, which gets the neutral result back. */
+  agent?: Agent;
   cwd?: string;
   prompt?: string;
   prompt_id?: string;
@@ -361,6 +357,18 @@ interface HookInput {
   transcript_path?: string;
   tool_name?: string;
   tool_input?: Record<string, unknown>;
+}
+
+/**
+ * What a hook decided, before it's shaped for an agent. `context` is for the
+ * model, `notice` for the human, `deny` refuses a tool call, `block` refuses
+ * a stop and is what the agent must fix.
+ */
+export interface HookResult {
+  context?: string;
+  notice?: string;
+  deny?: string;
+  block?: string;
 }
 
 function readStdin(): string {
@@ -373,10 +381,6 @@ function readStdin(): string {
 
 function hookRoot(input: HookInput): string | null {
   return findRoot(input.cwd || process.cwd());
-}
-
-function emit(json: object): void {
-  out(JSON.stringify(json));
 }
 
 function safeTreeId(root: string): string | null {
@@ -401,38 +405,37 @@ function appendSigned(root: string, rec: LedgerRecord): void {
   appendMirror(root, rec as SignedRecord, content);
 }
 
-async function runHook(name: string, input: HookInput): Promise<number> {
-  const root = hookRoot(input);
-  if (!root) return 0;
+/** Which variable says this process was started from inside an agent session, if any. */
+export function nestedMarker(env: NodeJS.ProcessEnv = process.env): string | null {
+  return NESTED_AGENT_ENVS.find((name) => env[name]) ?? null;
+}
+
+async function decideHook(name: string, input: HookInput, root: string): Promise<HookResult> {
+  const agent = input.agent ?? "claude";
 
   if (name === "hook-session") {
     const { records: all } = readRecords(root);
     const pending = pendingMessage(all);
-    emit({
-      hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: sessionContext(cliCommand(), all) },
-      ...(pending ? { systemMessage: `thisisfine is waiting for your answer:\n${pending}` } : {})
-    });
-    return 0;
+    return { context: sessionContext(cliCommand(), all), ...(pending ? { notice: `thisisfine is waiting for your answer:\n${pending}` } : {}) };
   }
 
   if (name === "hook-prompt") {
     const { records: all, readError } = readRecords(root);
-    if (readError) return 0;
+    if (readError) return {};
+    // An agent's shell running `pi -p y` or `claude -p y` reaches this hook
+    // with a prompt no person typed. Neither lock nor dismiss: the human's
+    // own answer is still to come.
+    const marker = nestedMarker();
+    if (marker) return { context: nestedContext(marker) };
     const key = loadOrCreateKey();
     const d = decidePrompt(all, loadState(root), {
       prompt: input.prompt ?? "", promptId: input.prompt_id ?? "", sessionId: input.session_id ?? "",
       transcriptPath: input.transcript_path ?? "", now: new Date().toISOString(),
-      key, keyId: keyIdOf(key), hashOf: hashOf(root)
+      key, keyId: keyIdOf(key), hashOf: hashOf(root), agent
     });
     for (const r of d.append) appendSigned(root, r);
     saveState(root, d.state);
-    if (d.additionalContext || d.systemMessage) {
-      emit({
-        hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: d.additionalContext },
-        ...(d.systemMessage ? { systemMessage: d.systemMessage } : {})
-      });
-    }
-    return 0;
+    return { ...(d.additionalContext ? { context: d.additionalContext } : {}), ...(d.systemMessage ? { notice: d.systemMessage } : {}) };
   }
 
   if (name === "hook-guard") {
@@ -441,23 +444,44 @@ async function runHook(name: string, input: HookInput): Promise<number> {
       toolName: input.tool_name ?? "", toolInput: input.tool_input ?? {}, root, home: homeDir(),
       records: readError ? readMirror(root) : ledger
     });
-    if (d.deny) emit({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: d.reason } });
-    return 0;
+    return d.deny ? { deny: d.reason } : {};
   }
 
-  if (name === "hook-stop") {
-    const { records: all, readError } = readRecords(root);
-    const key = loadOrCreateKey();
-    const d = await decideStop({
-      records: all, readError, mirror: readMirror(root), key, keyId: keyIdOf(key), hashOf: hashOf(root),
-      treeId: safeTreeId(root), state: loadState(root), runAll: (checks) => runAll(root, checks, "stop")
-    });
-    saveState(root, d.state);
-    if (d.block) emit({ decision: "block", reason: d.reason, systemMessage: d.systemMessage });
-    else if (d.systemMessage) emit({ systemMessage: d.systemMessage });
-    return 0;
+  // hook-stop
+  const { records: all, readError } = readRecords(root);
+  const key = loadOrCreateKey();
+  const d = await decideStop({
+    records: all, readError, mirror: readMirror(root), key, keyId: keyIdOf(key), hashOf: hashOf(root),
+    treeId: safeTreeId(root), state: loadState(root), runAll: (checks) => runAll(root, checks, "stop"),
+    who: agentName(agent)
+  });
+  saveState(root, d.state);
+  return { ...(d.block ? { block: d.reason } : {}), ...(d.systemMessage ? { notice: d.systemMessage } : {}) };
+}
+
+/** Claude Code's hook output, byte for byte what it was before pi existed. */
+function forClaude(name: string, r: HookResult): object | null {
+  if (name === "hook-session") {
+    return { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: r.context ?? "" }, ...(r.notice ? { systemMessage: r.notice } : {}) };
   }
-  return 2;
+  if (name === "hook-prompt") {
+    if (!r.context && !r.notice) return null;
+    return { hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: r.context ?? "" }, ...(r.notice ? { systemMessage: r.notice } : {}) };
+  }
+  if (name === "hook-guard") {
+    return r.deny ? { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: r.deny } } : null;
+  }
+  if (r.block) return { decision: "block", reason: r.block, systemMessage: r.notice ?? "" };
+  return r.notice ? { systemMessage: r.notice } : null;
+}
+
+async function runHook(name: string, input: HookInput): Promise<number> {
+  const root = hookRoot(input);
+  if (!root) return 0;
+  const result = await decideHook(name, input, root);
+  const json = input.agent === "pi" ? (Object.keys(result).length ? result : null) : forClaude(name, result);
+  if (json) out(JSON.stringify(json));
+  return 0;
 }
 
 // ── entry ───────────────────────────────────────────────────────────────

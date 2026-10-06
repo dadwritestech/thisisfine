@@ -88,9 +88,9 @@ export function brokenForAgent(broken: Broken[]): string {
 }
 
 /** Stop-hook `systemMessage`: read by the human. */
-export function brokenForHuman(broken: Broken[]): string {
+export function brokenForHuman(broken: Broken[], who = "Claude"): string {
   const list = broken.map(({ promise: p }) => `#${p.number} "${p.sentence}" (you locked it ${quoteHuman(p)})`).join("; ");
-  return `🔥 This is NOT fine. Claude broke ${list}. Sent it back to fix.`;
+  return `🔥 This is NOT fine. ${who} broke ${list}. Sent it back to fix.`;
 }
 
 export function fineMessage(kept: number, flaky: number[]): string {
@@ -120,22 +120,22 @@ export function uncheckableForAgent(error: string): string {
   ].join("\n");
 }
 
-export function uncheckableForHuman(error: string): string {
-  return `🔥 This is NOT fine. Couldn't check the promises: ${error.trim().split("\n")[0]}. Sent Claude back to fix it.`;
+export function uncheckableForHuman(error: string, who = "Claude"): string {
+  return `🔥 This is NOT fine. Couldn't check the promises: ${error.trim().split("\n")[0]}. Sent ${who} back to fix it.`;
 }
 
 /** Same block, different cause than a broken promise (integrity, app won't start). */
-export function stuckMessage(what: string, tries: number): string {
-  return `🔥 thisisfine blocked ${tries} stops in a row (${what}), so I let Claude stop. Your call: run "thisisfine verify" to see what's wrong.`;
+export function stuckMessage(what: string, tries: number, who = "Claude"): string {
+  return `🔥 thisisfine blocked ${tries} stops in a row (${what}), so I let ${who} stop. Your call: run "thisisfine verify" to see what's wrong.`;
 }
 
 export function integrityForHuman(problems: string[]): string {
   return `🔥 This is NOT fine. Promise records were changed without your "y": ${problems.join("; ")}`;
 }
 
-export function loopBreakMessage(broken: number[], tries: number): string {
+export function loopBreakMessage(broken: number[], tries: number, who = "Claude"): string {
   const which = broken.map((n) => `#${n}`).join(", ");
-  return `🔥 Claude couldn't keep promise ${which} after ${tries} tries, so I let it stop. Your call: tell it how to fix it, or /retire the promise if the behaviour should change.`;
+  return `🔥 ${who} couldn't keep promise ${which} after ${tries} tries, so I let it stop. Your call: tell it how to fix it, or /retire the promise if the behaviour should change.`;
 }
 
 export function lockedMessage(locked: { number: number; sentence: string; proven: boolean }[], retired: number[]): string {
@@ -198,11 +198,17 @@ const ASK_TO_RETIRE = `To change it, ask the human to retire the promise (thisis
 
 export const guardText = {
   ledger: `thisisfine: .thisisfine/promises.jsonl is written only by thisisfine, after the human says yes. Use "thisisfine status" to read it.`,
-  hooks: `thisisfine: hook commands run only from Claude Code's own hooks, because only the human can answer a proposal.`,
+  hooks: `thisisfine: hook commands run only from the agent's own hooks (Claude Code's or pi's), because only the human can answer a proposal.`,
   home: `thisisfine: the signing key and the confirmed copies of every promise live there. They are not for the agent to read or change.`,
   check: (number: number, sentence: string) =>
     `thisisfine: this check is promise #${number} "${sentence}", which the human locked. Fix the app, not the check. ${ASK_TO_RETIRE}`,
   config: (rel: string) =>
     `thisisfine: ${rel} decides how locked promises are checked, so it is frozen once a promise is locked. If it really needs to change, ask the human to edit it.`,
-  stateDir: `thisisfine: this command would write inside .thisisfine/ where locked promises live. Write new checks with the Write tool instead; to change a locked promise, ask the human to retire it.`
+  stateDir: `thisisfine: this command would write inside .thisisfine/ where locked promises live. Write new checks with the Write tool instead; to change a locked promise, ask the human to retire it.`,
+  nested: `thisisfine: that variable is how thisisfine tells a person's "y" from one typed by an agent you started. Leave it alone; only the human can answer a proposal.`
 };
+
+/** A prompt submitted by an agent that another agent's shell started: it can't lock, and it doesn't dismiss either. */
+export function nestedContext(marker: string): string {
+  return `[thisisfine] This session was started from inside another agent session (${marker} is set), so a "y" here can't lock or retire a promise. Only the human, in their own session, can answer a proposal.`;
+}

@@ -3,7 +3,8 @@ import { classifyPrompt } from "./affirm.ts";
 import { foldPromises, nextNumber, pendingProposals } from "./promises.ts";
 import { dismissedContext, lockedContext, lockedMessage, nudgeContext } from "./render.ts";
 import { signRecord } from "./sign.ts";
-import type { DismissRecord, LedgerRecord, LockRecord, RetireRecord, State } from "./types.ts";
+import { agentName } from "./types.ts";
+import type { Agent, DismissRecord, LedgerRecord, LockRecord, RetireRecord, State } from "./types.ts";
 
 export const NUDGE_EVERY = 5;
 
@@ -17,6 +18,8 @@ export interface PromptInput {
   keyId: string;
   /** Current hash of a check file (root-relative path). */
   hashOf: (check: string) => string;
+  /** Which agent's hook saw the prompt; decides how `verify` re-reads `transcriptPath`. */
+  agent?: Agent;
 }
 
 export interface PromptDecision {
@@ -59,7 +62,9 @@ export function decidePrompt(records: LedgerRecord[], state: State, input: Promp
   const promises = foldPromises(records);
   const confirmation = {
     words: input.prompt, promptId: input.promptId, sessionId: input.sessionId,
-    transcriptPath: input.transcriptPath, keyId: input.keyId, sig: ""
+    transcriptPath: input.transcriptPath, keyId: input.keyId, sig: "",
+    // only pi's records carry it, so Claude Code records sign exactly as before
+    ...(input.agent && input.agent !== "claude" ? { agent: input.agent } : {})
   };
   const append: LedgerRecord[] = [];
   const locked: { number: number; sentence: string; proven: boolean }[] = [];
@@ -82,7 +87,7 @@ export function decidePrompt(records: LedgerRecord[], state: State, input: Promp
     // changed since, they'd be signing something they never saw run.
     if (input.hashOf(p.check) !== p.checkHash) {
       append.push(dismiss(p.id));
-      refused.push(`#${p.number}'s check changed after it was proposed; ask Claude to propose it again`);
+      refused.push(`#${p.number}'s check changed after it was proposed; ask ${agentName(input.agent)} to propose it again`);
       continue;
     }
     const rec: LockRecord = {

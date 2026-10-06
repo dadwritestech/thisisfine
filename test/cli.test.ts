@@ -7,7 +7,7 @@ import { fileHash } from "../src/hash.ts";
 import { readLedger } from "../src/ledger.ts";
 import { readMirror } from "../src/mirror.ts";
 import type { LedgerRecord } from "../src/types.ts";
-import { proposal, put, tempDir } from "./helpers.ts";
+import { cleanEnv, proposal, put, tempDir } from "./helpers.ts";
 
 const BIN = resolve("bin/thisisfine.mjs");
 const CHECK = ".thisisfine/checks/1-badge.spec.ts";
@@ -16,7 +16,7 @@ function run(args: string[], opts: { cwd: string; home: string; stdin?: unknown 
   const r = spawnSync(process.execPath, [BIN, ...args], {
     cwd: opts.cwd, encoding: "utf8",
     input: opts.stdin === undefined ? "" : JSON.stringify(opts.stdin),
-    env: { ...process.env, THISISFINE_HOME: opts.home }
+    env: { ...cleanEnv(), THISISFINE_HOME: opts.home }
   });
   return { code: r.status, stdout: r.stdout, stderr: r.stderr, json: () => JSON.parse(r.stdout) as Record<string, any> };
 }

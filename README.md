@@ -108,6 +108,8 @@ The first `/promise` sets up `.thisisfine/` in your repo and installs Playwright
 
 You don't have to type `/promise`. When you tell Claude something works ("works!", "perfect", "lgtm"), thisisfine reminds it to offer a promise. That happens at most once every five prompts, so it won't nag.
 
+**Using pi instead?** See [integrations/pi](integrations/pi/README.md) for the extension and what it can and can't guarantee.
+
 ## How it works
 
 ```
@@ -149,7 +151,7 @@ thisisfine can't stop an agent that is determined to cheat. It makes cheating lo
 
 - **Tamper-evident, not tamper-proof.** Each lock is HMAC-signed with a key in `~/.thisisfine/`, and mirrored there too. If a locked check, the ledger, or the config is changed or deleted, the next stop is blocked until `thisisfine restore` puts back exactly what you confirmed. The guard that refuses edits up front is a speed bump. Shell commands can be written in endless ways, and it only catches the common ones.
 - **Signatures are per machine.** The key never leaves your home directory, so a teammate's machine can read your promises and run them, but can't verify your signatures. Cross-machine verification is future work.
-- **Claude Code and web apps only, for now.** Other agents (Codex, Cursor, pi) and non-browser checks are out of scope for v0.
+- **Claude Code, pi, and web apps only, for now.** pi works through [an extension](integrations/pi/README.md) with one weaker guarantee: its session file can't prove a person typed the "y". Other agents (Codex, Cursor) and non-browser checks are out of scope for v0.
 - **It's only as good as the check.** A promise proves the check can fail when the behaviour is gone. It doesn't prove the check covers everything you had in mind. That's why the sentence is short, and why a person has to say yes.
 - **Your app runs in your folder.** If a check clicks Save, it really saves, before every stop. `propose` names any project file the app wrote while the check ran, so you can point `start` at a scratch copy before you say yes. (We learned this the hard way: on a real app, a theme check rewrote `config.json`, and that saved setting later made the check pass with the feature broken.)
 - **Not on npm yet.** The package builds and installs (`npm pack`, then `npx thisisfine --help` works), but it hasn't been published. For now, install it as a Claude Code plugin.

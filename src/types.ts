@@ -4,6 +4,27 @@ export const HOME_ENV = "THISISFINE_HOME";
 export const PLAYWRIGHT_VERSION = "1.61.0";
 
 /**
+ * Agents that drive the hooks. Claude Code is the default and its records
+ * carry no `agent` field, so every lock signed before pi existed still verifies.
+ */
+export const AGENTS = ["claude", "pi"] as const;
+export type Agent = (typeof AGENTS)[number];
+
+/** How the human-facing messages name the agent. */
+export function agentName(agent: Agent = "claude"): string {
+  return agent === "pi" ? "pi" : "Claude";
+}
+
+/**
+ * Set in the environment of anything an agent session starts. pi's bash tool
+ * also exports PI_SESSION_ID. A "y" typed into an agent that one of these
+ * started (`pi -p y`, `claude -p y` from the agent's own shell) came from
+ * the outer agent, not from a person.
+ */
+export const UNDER_AGENT_ENV = "THISISFINE_UNDER_AGENT";
+export const NESTED_AGENT_ENVS = [UNDER_AGENT_ENV, "PI_SESSION_ID"] as const;
+
+/**
  * Runtime list and compile-time type come from one array:
  * `ledger.ts` validates `kind` against this list, so the two can never drift
  * and a hand-written `"kind":"approved"` line is rejected, not ignored.
@@ -62,6 +83,8 @@ export interface Confirmation {
   transcriptPath: string;
   keyId: string;
   sig: string;
+  /** Absent for Claude Code. Decides how `verify` reads `transcriptPath`. */
+  agent?: Agent;
 }
 
 export interface LockRecord extends Confirmation {

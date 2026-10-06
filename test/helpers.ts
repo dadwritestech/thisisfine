@@ -55,3 +55,10 @@ export function commitAll(root: string, msg: string): string {
   sh(root, "git", ["commit", "-q", "-m", msg]);
   return sh(root, "git", ["rev-parse", "HEAD"]);
 }
+
+/** process.env minus the markers that say "an agent started me", so tests behave the same under pi. */
+export function cleanEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const name of ["THISISFINE_UNDER_AGENT", "PI_SESSION_ID", "PI_SESSION_FILE"]) delete env[name];
+  return env;
+}

@@ -2,7 +2,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { activePromises } from "./promises.ts";
 import { guardText } from "./render.ts";
 import type { LedgerRecord } from "./types.ts";
-import { STATE_DIR } from "./types.ts";
+import { NESTED_AGENT_ENVS, STATE_DIR } from "./types.ts";
 
 export interface GuardInput {
   toolName: string;
@@ -18,7 +18,9 @@ export interface GuardDecision {
   reason: string;
 }
 
-const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
+/** Lowercase: Claude Code says "Edit", pi says "edit". */
+const WRITE_TOOLS = new Set(["edit", "write", "multiedit", "notebookedit"]);
+const NESTED = new RegExp(String.raw`\b(${NESTED_AGENT_ENVS.join("|")})\b`);
 const ALLOW: GuardDecision = { deny: false, reason: "" };
 const deny = (reason: string): GuardDecision => ({ deny: true, reason });
 
@@ -61,7 +63,9 @@ export function decideGuard(i: GuardInput): GuardDecision {
   const hasLocks = i.records.some((r) => r.kind === "lock");
   const lockedChecks = new Map(activePromises(i.records).map((p) => [fold(p.check), p]));
 
-  if (i.toolName === "Bash") {
+  const tool = i.toolName.toLowerCase();
+
+  if (tool === "bash") {
     const command = typeof i.toolInput.command === "string" ? i.toolInput.command : "";
     const norm = fold(slashes(command));
     if (/\bhook-(session|prompt|guard|stop)\b/.test(command)) return deny(guardText.hooks);
@@ -69,6 +73,8 @@ export function decideGuard(i: GuardInput): GuardDecision {
       return deny(guardText.home);
     }
     if (/promises\.jsonl/i.test(command)) return deny(guardText.ledger);
+    // unsetting these is how a nested `pi -p y` would pass for a person
+    if (NESTED.test(command)) return deny(guardText.nested);
     if (!hasLocks || !looksLikeWrite(command)) return ALLOW;
 
     for (const p of lockedChecks.values()) {
@@ -88,7 +94,7 @@ export function decideGuard(i: GuardInput): GuardDecision {
   const raw = i.toolInput.file_path ?? i.toolInput.notebook_path ?? i.toolInput.path;
   if (typeof raw !== "string" || raw === "") return ALLOW;
   if (inside(home, fold(slashes(resolve(i.root, raw))))) return deny(guardText.home);
-  if (!WRITE_TOOLS.has(i.toolName)) return ALLOW;
+  if (!WRITE_TOOLS.has(tool)) return ALLOW;
 
   const rel = projectRel(i.root, raw);
   if (rel === null || !rel.startsWith(`${STATE_DIR}/`)) return ALLOW;
