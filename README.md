@@ -8,12 +8,6 @@
 <h1 align="center">thisisfine</h1>
 
 <p align="center">
-  <b>Your coding agent says "✅ Done" while your app is on fire.</b><br>
-  thisisfine turns every behaviour you said <i>yes</i> to into a locked, proven browser check,<br>
-  and won't let Claude finish a turn that breaks one.
-</p>
-
-<p align="center">
   <a href="https://github.com/dadwritestech/thisisfine/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/dadwritestech/thisisfine/test.yml?branch=main&amp;label=tests&amp;logo=githubactions&amp;logoColor=white&amp;style=flat-square&amp;labelColor=2b1d12" alt="Tests"></a>
   <a href="#install"><img src="https://img.shields.io/badge/works%20with-Claude%20Code%20%C2%B7%20Codex%20%C2%B7%20pi-ff7a1a?style=flat-square&amp;labelColor=2b1d12&amp;logo=claude&amp;logoColor=white" alt="Works with Claude Code, Codex and pi"></a>
   <img src="https://img.shields.io/badge/checks-Playwright%2C%20real%20browser-ff7a1a?style=flat-square&amp;labelColor=2b1d12" alt="Checks run in a real browser with Playwright">
@@ -27,9 +21,15 @@
   <img src="https://img.shields.io/badge/your%20agent-%E2%9C%85%20done%21-2ea043?style=flat-square&amp;labelColor=2b1d12" alt="Your agent: done!">
   <img src="https://img.shields.io/badge/your%20app-%F0%9F%94%A5%20on%20fire-d1242f?style=flat-square&amp;labelColor=2b1d12" alt="Your app: on fire">
   <img src="https://img.shields.io/badge/status-this%20is%20fine-ff4d00?style=flat-square&amp;labelColor=2b1d12" alt="Status: this is fine">
-  <img src="https://img.shields.io/badge/coffee-%E2%98%95%20still%20hot-8b5a2b?style=flat-square&amp;labelColor=2b1d12" alt="Coffee: still hot">
+  <img src="https://img.shields.io/badge/coffee-still%20hot-8b5a2b?style=flat-square&amp;labelColor=2b1d12" alt="Coffee: still hot">
   <img src="https://img.shields.io/badge/vibes-%F0%9F%94%92%20locked-6e40c9?style=flat-square&amp;labelColor=2b1d12" alt="Vibes: locked">
   <img src="https://img.shields.io/badge/excuses%20accepted-0-57606a?style=flat-square&amp;labelColor=2b1d12" alt="Excuses accepted: 0">
+</p>
+
+<p align="center">
+  <b>Your coding agent says "✅ Done" while your app is on fire.</b><br>
+  thisisfine turns every behaviour you said <i>yes</i> to into a locked, proven browser check,<br>
+  and won't let Claude finish a turn that breaks one.
 </p>
 
 <p align="center">
