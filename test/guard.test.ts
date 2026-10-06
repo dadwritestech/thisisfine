@@ -51,6 +51,23 @@ test("config and Playwright setup are open until the first lock, then closed", (
   }
 });
 
+test("public keys can never be written by the agent, with or without locks", () => {
+  for (const records of [[], locked]) {
+    for (const rel of [".thisisfine/keys/sam.pub", ".thisisfine/keys/agent.pub", ".thisisfine\\keys\\x.pub"]) {
+      const d = guard("Write", { file_path: rel.includes("\\") ? rel : p(rel) }, records);
+      assert.equal(d.deny, true, `${rel} with ${records.length} records`);
+      assert.match(d.reason, /keys/);
+    }
+    for (const command of ["cp /tmp/evil.pub .thisisfine/keys/", "rm .thisisfine/keys/sam.pub", "echo x > .thisisfine/keys/a.pub", "mv .thisisfine/keys .thisisfine/k"]) {
+      const d = guard("Bash", { command }, records);
+      assert.equal(d.deny, true, `${command} with ${records.length} records`);
+      assert.match(d.reason, /keys/);
+    }
+  }
+  assert.equal(guard("Read", { file_path: p(".thisisfine/keys/sam.pub") }).deny, false, "public keys are public");
+  assert.equal(guard("Bash", { command: "cat .thisisfine/keys/sam.pub" }, []).deny, false);
+});
+
 test("the home dir (key, mirror, state) is off limits to file tools", () => {
   assert.equal(guard("Write", { file_path: join(home, "key") }, []).deny, true);
   assert.equal(guard("Edit", { file_path: join(home, "projects", "abc", "state.json") }, []).deny, true);

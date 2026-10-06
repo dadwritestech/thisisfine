@@ -75,7 +75,10 @@ export function decideGuard(i: GuardInput): GuardDecision {
     if (/promises\.jsonl/i.test(command)) return deny(guardText.ledger);
     // unsetting these is how a nested `pi -p y` would pass for a person
     if (NESTED.test(command)) return deny(guardText.nested);
-    if (!hasLocks || !looksLikeWrite(command)) return ALLOW;
+    if (!looksLikeWrite(command)) return ALLOW;
+    // A committed public key vouches for every lock it signs: no agent writes, locks or not.
+    if (/\.thisisfine\/keys(?![\w-])/.test(norm)) return deny(guardText.keys);
+    if (!hasLocks) return ALLOW;
 
     for (const p of lockedChecks.values()) {
       const base = p.check.slice(p.check.lastIndexOf("/") + 1);
@@ -99,6 +102,7 @@ export function decideGuard(i: GuardInput): GuardDecision {
   const rel = projectRel(i.root, raw);
   if (rel === null || !rel.startsWith(`${STATE_DIR}/`)) return ALLOW;
   if (rel === `${STATE_DIR}/promises.jsonl`) return deny(guardText.ledger);
+  if (rel === `${STATE_DIR}/keys` || rel.startsWith(`${STATE_DIR}/keys/`)) return deny(guardText.keys);
   const p = lockedChecks.get(rel);
   if (p) return deny(guardText.check(p.number, p.sentence));
   if (hasLocks && !rel.startsWith(`${STATE_DIR}/checks/`) && !rel.startsWith(`${STATE_DIR}/runs/`)) {

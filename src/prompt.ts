@@ -3,6 +3,7 @@ import { classifyPrompt } from "./affirm.ts";
 import { foldPromises, nextNumber, pendingProposals } from "./promises.ts";
 import { dismissedContext, lockedContext, lockedMessage, nudgeContext } from "./render.ts";
 import { signRecord } from "./sign.ts";
+import type { Signer } from "./sign.ts";
 import { agentName } from "./types.ts";
 import type { Agent, DismissRecord, LedgerRecord, LockRecord, RetireRecord, State } from "./types.ts";
 
@@ -14,8 +15,8 @@ export interface PromptInput {
   sessionId: string;
   transcriptPath: string;
   now: string;
-  key: Buffer;
-  keyId: string;
+  /** This machine's Ed25519 key; the hook signs with it, the agent never sees it. */
+  signer: Signer;
   /** Current hash of a check file (root-relative path). */
   hashOf: (check: string) => string;
   /** Which agent's hook saw the prompt; decides how `verify` re-reads `transcriptPath`. */
@@ -62,7 +63,7 @@ export function decidePrompt(records: LedgerRecord[], state: State, input: Promp
   const promises = foldPromises(records);
   const confirmation = {
     words: input.prompt, promptId: input.promptId, sessionId: input.sessionId,
-    transcriptPath: input.transcriptPath, keyId: input.keyId, sig: "",
+    transcriptPath: input.transcriptPath, keyId: input.signer.id, sig: "",
     // only pi's records carry it, so Claude Code records sign exactly as before
     ...(input.agent && input.agent !== "claude" ? { agent: input.agent } : {})
   };
@@ -79,7 +80,7 @@ export function decidePrompt(records: LedgerRecord[], state: State, input: Promp
         continue;
       }
       const rec: RetireRecord = { kind: "retire", proposal: p.id, number: p.number, reason: p.reason, retiredAt: input.now, ...confirmation };
-      append.push(signRecord(rec, input.key));
+      append.push(signRecord(rec, input.signer));
       retired.push(p.number);
       continue;
     }
@@ -94,7 +95,7 @@ export function decidePrompt(records: LedgerRecord[], state: State, input: Promp
       kind: "lock", proposal: p.id, number: p.number, sentence: p.sentence, check: p.check,
       checkHash: p.checkHash, proof: p.proof, confirmedAt: input.now, ...confirmation
     };
-    append.push(signRecord(rec, input.key));
+    append.push(signRecord(rec, input.signer));
     locked.push({ number: p.number, sentence: p.sentence, proven: p.proof?.proven ?? false });
   }
 

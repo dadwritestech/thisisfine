@@ -2,15 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { decideStop } from "../src/gate.ts";
 import type { StopInput } from "../src/gate.ts";
-import { keyIdOf, loadOrCreateKey, signRecord } from "../src/sign.ts";
+import { loadOrCreateSigner, publicKeyEntry, signRecord } from "../src/sign.ts";
 import { defaultState } from "../src/state.ts";
 import type { CheckOutcome, Coverage } from "../src/types.ts";
 import { lock, proposal, tempDir } from "./helpers.ts";
 
-const key = loadOrCreateKey(tempDir());
-const keyId = keyIdOf(key);
-const l1 = signRecord(lock({ keyId, words: "y, perfect", confirmedAt: "2026-10-03T12:00:00.000Z" }), key);
-const l2 = signRecord(lock({ keyId, proposal: "p2", number: 2, sentence: "Logo links home", check: ".thisisfine/checks/2-logo.spec.ts" }), key);
+const signer = loadOrCreateSigner(tempDir());
+const keyring = new Map([[signer.id, publicKeyEntry(signer.publicPem, { name: "sam", file: ".thisisfine/keys/sam.pub", local: true })]]);
+const l1 = signRecord(lock({ words: "y, perfect", confirmedAt: "2026-10-03T12:00:00.000Z" }), signer);
+const l2 = signRecord(lock({ proposal: "p2", number: 2, sentence: "Logo links home", check: ".thisisfine/checks/2-logo.spec.ts" }), signer);
 
 const C1 = ".thisisfine/checks/1-badge.spec.ts";
 const C2 = ".thisisfine/checks/2-logo.spec.ts";
@@ -30,7 +30,7 @@ function input(over: Partial<StopInput> = {}, results: Record<string, CheckOutco
     records: [proposal(), l1, proposal({ id: "p2", number: 2 }), l2],
     readError: null,
     mirror: [l1, l2],
-    key, keyId,
+    keyring,
     hashOf: () => "abcdabcdabcdabcd",
     treeId: "tree-A",
     state: defaultState(),

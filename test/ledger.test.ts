@@ -41,6 +41,15 @@ test("lock without a signature is rejected", () => {
   assert.throws(() => readLedger(path), /sig/);
 });
 
+test("a signed record's alg is absent (legacy HMAC) or ed25519, nothing else", () => {
+  for (const [alg, ok] of [[undefined, true], ["ed25519", true], ["hmac", false], ["none", false]] as const) {
+    const path = ledgerPath(tempDir());
+    appendRecord(path, { ...lock(), alg } as unknown as ReturnType<typeof lock>);
+    if (ok) assert.equal(readLedger(path).length, 1);
+    else assert.throws(() => readLedger(path), /alg/);
+  }
+});
+
 test("check path escaping the project is rejected", () => {
   const path = ledgerPath(tempDir());
   appendRecord(path, proposal({ check: "../../etc/passwd" }));

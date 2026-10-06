@@ -6,6 +6,7 @@ import {
 } from "./render.ts";
 import type { Broken } from "./render.ts";
 import { selectChecks } from "./select.ts";
+import type { Keyring } from "./sign.ts";
 import type { CheckOutcome, Coverage, LedgerRecord, SignedRecord, State } from "./types.ts";
 
 /** Blocks in a row, for the same reason, before the human gets the wheel back. */
@@ -16,8 +17,7 @@ export interface StopInput {
   /** Set when the ledger exists but can't be parsed; `records` is then empty. */
   readError: string | null;
   mirror: SignedRecord[];
-  key: Buffer;
-  keyId: string;
+  keyring: Keyring;
   hashOf: (check: string) => string;
   /** Git tree of the working copy, or null outside git (then every stop runs). */
   treeId: string | null;

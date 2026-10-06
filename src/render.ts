@@ -203,6 +203,7 @@ export const guardText = {
   ledger: `thisisfine: .thisisfine/promises.jsonl is written only by thisisfine, after the human says yes. Use "thisisfine status" to read it.`,
   hooks: `thisisfine: hook commands run only from the agent's own hooks (Claude Code's or pi's), because only the human can answer a proposal.`,
   home: `thisisfine: the signing key and the confirmed copies of every promise live there. They are not for the agent to read or change.`,
+  keys: `thisisfine: .thisisfine/keys/ holds the public keys that vouch for locked promises. Only thisisfine writes this machine's key there; a teammate's key is added by a person, in a reviewed commit.`,
   check: (number: number, sentence: string) =>
     `thisisfine: this check is promise #${number} "${sentence}", which the human locked. Fix the app, not the check. ${ASK_TO_RETIRE}`,
   config: (rel: string) =>

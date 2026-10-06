@@ -1,13 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileHash } from "../src/hash.ts";
 import { readLedger } from "../src/ledger.ts";
 import { readMirror } from "../src/mirror.ts";
+import { hmacSign, keyIdOf } from "../src/sign.ts";
 import type { LedgerRecord } from "../src/types.ts";
-import { cleanEnv, proposal, put, tempDir } from "./helpers.ts";
+import { cleanEnv, lock, proposal, put, tempDir } from "./helpers.ts";
 
 const BIN = resolve("bin/thisisfine.mjs");
 const CHECK = ".thisisfine/checks/1-badge.spec.ts";
@@ -173,4 +175,77 @@ test("init writes the scaffold and reports what it detected", () => {
   assert.match(r.stdout, /Start command: npm start/);
   assert.match(r.stdout, /Not a git repository/);
   assert.match(readFileSync(join(root, ".thisisfine/package.json"), "utf8"), /"@playwright\/test": "1\.61\.0"/);
+});
+
+// ── cross-machine verification ──────────────────────────────────────────
+
+const pubFiles = (root: string) => (existsSync(join(root, ".thisisfine/keys")) ? readdirSync(join(root, ".thisisfine/keys")) : []);
+
+test("hook-prompt publishes this machine's public key next to the lock and says to commit it", () => {
+  const { root, home, r } = lockOne();
+  const files = pubFiles(root);
+  assert.equal(files.length, 1);
+  const pem = readFileSync(join(root, ".thisisfine/keys", files[0]), "utf8");
+  assert.match(pem, /BEGIN PUBLIC KEY/);
+  assert.doesNotMatch(pem, /PRIVATE/);
+  assert.ok(r.json().systemMessage.includes(`Your public key is in .thisisfine/keys/${files[0]}; commit it`), r.stdout);
+  const again = run(["hook-prompt"], { cwd: root, home, stdin: { prompt: "y", prompt_id: "pr2", cwd: root } });
+  assert.equal(again.stdout, "", "no pending proposal, no second key file, no message");
+  assert.equal(pubFiles(root).length, 1);
+});
+
+test("a teammate's machine verifies the lock from the committed public key, without making a key", () => {
+  const { root } = lockOne();
+  const teammate = join(tempDir(), "home");
+  const r = run(["verify"], { cwd: root, home: teammate });
+  assert.equal(r.code, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /✔ #1 lock \("y", .+\): signed by /);
+  assert.ok(r.stdout.includes(`signed by ${pubFiles(root)[0]} (the session transcript`), r.stdout);
+  assert.match(r.stdout, /transcript isn't on this machine/);
+  assert.equal(existsSync(teammate), false, "verify never creates keys or a home dir");
+});
+
+test("a teammate's verify catches a lock edited after it was signed", () => {
+  const { root } = lockOne();
+  const ledger = join(root, ".thisisfine/promises.jsonl");
+  writeFileSync(ledger, readFileSync(ledger, "utf8").replaceAll("Badge shows the cart count", "Badge exists"));
+  const r = run(["verify"], { cwd: root, home: join(tempDir(), "home") });
+  assert.equal(r.code, 1, r.stdout);
+  assert.match(r.stdout, /✖ #1 lock .*signature doesn't match/);
+});
+
+test("verify --strict (for CI) fails on records no committed key can check", () => {
+  const { root } = lockOne();
+  rmSync(join(root, ".thisisfine/keys"), { recursive: true });
+  const teammate = join(tempDir(), "home");
+  const loose = run(["verify"], { cwd: root, home: teammate });
+  assert.equal(loose.code, 0, loose.stdout);
+  assert.match(loose.stdout, /· #1 lock .*no key in \.thisisfine\/keys\/ can check it/);
+  const strict = run(["verify", "--strict"], { cwd: root, home: teammate });
+  assert.equal(strict.code, 1);
+  assert.match(strict.stdout, /✖ #1 lock .*no key in \.thisisfine\/keys\/ can check it/);
+});
+
+test("a deleted public key blocks the stop on the machine that signed with it; restore writes it back", () => {
+  const { root, home } = lockOne();
+  rmSync(join(root, ".thisisfine/keys"), { recursive: true });
+  const blocked = run(["hook-stop"], { cwd: root, home, stdin: { cwd: root } });
+  assert.match(blocked.json().reason, /this machine's public key \([0-9a-f]{16}\) is missing from \.thisisfine\/keys\//);
+  const r = run(["restore"], { cwd: root, home });
+  assert.equal(r.code, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /Restored \.thisisfine\/keys\/.+\.pub/);
+  assert.equal(run(["verify", "--strict"], { cwd: root, home: join(tempDir(), "home") }).code, 0);
+});
+
+test("a legacy HMAC lock still verifies on the machine that signed it", () => {
+  const key = randomBytes(32);
+  const p = project();
+  mkdirSync(p.home, { recursive: true });
+  writeFileSync(join(p.home, "key"), key.toString("hex") + "\n");
+  const legacy = hmacSign(lock({ keyId: keyIdOf(key), checkHash: p.hash }), key);
+  writeFileSync(join(p.root, ".thisisfine/promises.jsonl"), JSON.stringify(proposal({ checkHash: p.hash })) + "\n" + JSON.stringify(legacy) + "\n");
+  const r = run(["verify"], { cwd: p.root, home: p.home });
+  assert.equal(r.code, 0, r.stdout);
+  assert.match(r.stdout, /✔ #1 lock .*signed by this machine's old HMAC key/);
+  assert.equal(run(["verify", "--strict"], { cwd: p.root, home: join(tempDir(), "home") }).code, 1, "elsewhere it can't be checked");
 });
