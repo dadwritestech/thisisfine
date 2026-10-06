@@ -40,3 +40,38 @@ test("a deleted transcript is reported as missing, not as forged", () => {
   assert.equal(verifyWords(join(tempDir(), "gone.jsonl"), "pr1", "y"), "missing");
   assert.equal(verifyWords("", "pr1", "y"), "missing");
 });
+
+const codexTurn = (turn: string, text: string) => ({
+  type: "event_msg",
+  payload: { type: "item_completed", thread_id: "th1", turn_id: turn, item: { type: "UserMessage", id: "u1", content: [{ type: "text", text }] } }
+});
+
+test("Codex: a UserMessage item in that turn with the same words verifies", () => {
+  const path = transcript([
+    { type: "event_msg", payload: { type: "task_started", turn_id: "t1" } },
+    { type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "<environment_context>y</environment_context>" }] } },
+    codexTurn("t1", " y, perfect ")
+  ]);
+  assert.equal(verifyWords(path, "t1", "y, perfect", "codex"), "verified");
+  assert.equal(verifyWords(path, "t2", "y, perfect", "codex"), "not-found", "another turn");
+  assert.equal(verifyWords(path, "t1", "no", "codex"), "not-found");
+});
+
+test("Codex: the agent's own messages and the model-facing copy are not a human yes", () => {
+  const path = transcript([
+    { type: "event_msg", payload: { type: "item_completed", turn_id: "t1", item: { type: "AgentMessage", content: [{ type: "Text", text: "y" }] } } },
+    { type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "y" }] } }
+  ]);
+  assert.equal(verifyWords(path, "t1", "y", "codex"), "not-found");
+});
+
+test("Codex: older sessions record the prompt as a user_message event after task_started", () => {
+  const path = transcript([
+    { type: "event_msg", payload: { type: "task_started", turn_id: "t1" } },
+    { type: "event_msg", payload: { type: "user_message", message: "first" } },
+    { type: "event_msg", payload: { type: "task_started", turn_id: "t2" } },
+    { type: "event_msg", payload: { type: "user_message", message: "y" } }
+  ]);
+  assert.equal(verifyWords(path, "t2", "y", "codex"), "verified");
+  assert.equal(verifyWords(path, "t1", "y", "codex"), "not-found");
+});

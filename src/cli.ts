@@ -387,7 +387,9 @@ function cmdVerify(strict: boolean): number {
     const note = {
       verified: r.agent === "pi"
         ? `✔ ${by}, and pi's session file has those words as that prompt (pi doesn't record who typed them)`
-        : `✔ ${by}, and the transcript shows a human typing those words`,
+        : r.agent === "codex"
+          ? `✔ ${by}, and Codex's session file shows those words typed in that turn`
+          : `✔ ${by}, and the transcript shows a human typing those words`,
       missing: `✔ ${by} (the session transcript isn't on this machine, so the words can't be re-checked)`,
       "not-human": `✖ ${by}, but in the transcript those words didn't come from a human`,
       "not-found": `✖ ${by}, but the transcript has no such prompt`
@@ -459,6 +461,8 @@ interface HookInput {
   cwd?: string;
   prompt?: string;
   prompt_id?: string;
+  /** Codex's id for the turn; Claude Code sends none, so it is what tells Codex apart. */
+  turn_id?: string;
   session_id?: string;
   transcript_path?: string;
   tool_name?: string;
@@ -531,8 +535,17 @@ export function nestedMarker(env: NodeJS.ProcessEnv = process.env): string | nul
   return NESTED_AGENT_ENVS.find((name) => env[name]) ?? null;
 }
 
+/**
+ * Codex runs the same hooks.json and reads the same output as Claude Code,
+ * so the only difference is where the "yes" is recorded: under a turn id,
+ * in Codex's rollout file.
+ */
+export function hookAgent(input: HookInput): Agent {
+  return input.agent ?? (input.turn_id ? "codex" : "claude");
+}
+
 async function decideHook(name: string, input: HookInput, root: string): Promise<HookResult> {
-  const agent = input.agent ?? "claude";
+  const agent = hookAgent(input);
 
   if (name === "hook-session") {
     const { records: all } = readRecords(root);
@@ -550,7 +563,7 @@ async function decideHook(name: string, input: HookInput, root: string): Promise
     if (marker) return { context: nestedContext(marker) };
     const signer = loadOrCreateSigner();
     const d = decidePrompt(all, loadState(root), {
-      prompt: input.prompt ?? "", promptId: input.prompt_id ?? "", sessionId: input.session_id ?? "",
+      prompt: input.prompt ?? "", promptId: input.prompt_id ?? input.turn_id ?? "", sessionId: input.session_id ?? "",
       transcriptPath: input.transcript_path ?? "", now: new Date().toISOString(),
       signer, hashOf: hashOf(root), agent
     });

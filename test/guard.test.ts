@@ -120,3 +120,25 @@ test("Bash: writes to locked checks or config are denied, reads are not", () => 
 test("Bash: before any lock, setup commands are allowed", () => {
   assert.equal(guard("Bash", { command: "rm -rf .thisisfine && thisisfine init" }, []).deny, false);
 });
+
+const patch = (...lines: string[]) => ({ command: ["*** Begin Patch", ...lines, "*** End Patch"].join("\n") });
+
+test("Codex apply_patch: every file the patch touches goes through the same rules", () => {
+  const d = guard("apply_patch", patch("*** Update File: .thisisfine/checks/1-badge.spec.ts", "@@", "-a", "+b"));
+  assert.equal(d.deny, true);
+  assert.match(d.reason, /#1 "Badge shows the cart count"/);
+  assert.equal(guard("apply_patch", patch("*** Add File: .thisisfine/promises.jsonl", "+x")).deny, true, "add the ledger");
+  assert.equal(guard("apply_patch", patch("*** Delete File: .thisisfine/keys/sam.pub")).deny, true, "delete a key");
+  assert.equal(guard("apply_patch", patch("*** Update File: src/a.js", "*** Move to: .thisisfine/checks/1-badge.spec.ts", "@@", "-a", "+b")).deny, true, "move onto a locked check");
+  assert.equal(guard("apply_patch", patch("*** Update File: src/cart.js", "@@", "-a", "+b", "*** Update File: .thisisfine\\config.json", "@@", "-a", "+b")).deny, true, "second file, backslashes");
+});
+
+test("Codex apply_patch: app code and new checks are fine, and so is text that only looks like a header", () => {
+  assert.equal(guard("apply_patch", patch("*** Update File: src/cart.js", "@@", "-a", "+b", "*** Add File: .thisisfine/checks/2-logo.spec.ts", "+x")).deny, false);
+  assert.equal(guard("apply_patch", patch("*** Update File: notes.md", "@@", "+ *** Update File: .thisisfine/promises.jsonl")).deny, false, "a + line is content");
+  assert.equal(guard("apply_patch", {}).deny, false);
+});
+
+test("Codex apply_patch can't reach the home dir either", () => {
+  assert.equal(guard("apply_patch", patch(`*** Add File: ${join(home, "state.json")}`, "+x")).deny, true);
+});

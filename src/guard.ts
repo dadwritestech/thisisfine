@@ -94,10 +94,40 @@ export function decideGuard(i: GuardInput): GuardDecision {
     return ALLOW;
   }
 
+  if (tool === "apply_patch") {
+    const text = typeof i.toolInput.command === "string" ? i.toolInput.command : "";
+    for (const path of patchPaths(text)) {
+      const d = decidePath(i, path, true, home, hasLocks, lockedChecks);
+      if (d.deny) return d;
+    }
+    return ALLOW;
+  }
+
   const raw = i.toolInput.file_path ?? i.toolInput.notebook_path ?? i.toolInput.path;
   if (typeof raw !== "string" || raw === "") return ALLOW;
+  return decidePath(i, raw, WRITE_TOOLS.has(tool), home, hasLocks, lockedChecks);
+}
+
+/**
+ * Codex edits files with one `apply_patch` tool whose input is the patch
+ * itself. The paths are in its header lines; body lines start with a space,
+ * "+" or "-", so a patch that merely mentions a header can't smuggle one in.
+ */
+export function patchPaths(patch: string): string[] {
+  const paths: string[] = [];
+  for (const line of patch.split(/\r?\n/)) {
+    const m = /^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+)$/.exec(line);
+    if (m) paths.push(m[1].trim());
+  }
+  return paths;
+}
+
+function decidePath(
+  i: GuardInput, raw: string, write: boolean, home: string, hasLocks: boolean,
+  lockedChecks: Map<string, ReturnType<typeof activePromises>[number]>
+): GuardDecision {
   if (inside(home, fold(slashes(resolve(i.root, raw))))) return deny(guardText.home);
-  if (!WRITE_TOOLS.has(tool)) return ALLOW;
+  if (!write) return ALLOW;
 
   const rel = projectRel(i.root, raw);
   if (rel === null || !rel.startsWith(`${STATE_DIR}/`)) return ALLOW;

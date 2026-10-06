@@ -14,11 +14,11 @@ import { cleanEnv, commitAll, initRepo, lock, proposal, put, sh, tempDir } from 
 const BIN = resolve("bin/thisisfine.mjs");
 const CHECK = ".thisisfine/checks/1-badge.spec.ts";
 
-function run(args: string[], opts: { cwd: string; home: string; stdin?: unknown }) {
+function run(args: string[], opts: { cwd: string; home: string; stdin?: unknown; env?: NodeJS.ProcessEnv }) {
   const r = spawnSync(process.execPath, [BIN, ...args], {
     cwd: opts.cwd, encoding: "utf8",
     input: opts.stdin === undefined ? "" : JSON.stringify(opts.stdin),
-    env: { ...cleanEnv(), THISISFINE_HOME: opts.home }
+    env: { ...cleanEnv(), THISISFINE_HOME: opts.home, ...opts.env }
   });
   return { code: r.status, stdout: r.stdout, stderr: r.stderr, json: () => JSON.parse(r.stdout) as Record<string, any> };
 }
@@ -354,4 +354,52 @@ test("diff names a base that doesn't exist instead of treating it as empty", () 
   assert.equal(r.code, 1);
   assert.match(r.stderr, /no-such-branch is not a commit/);
   assert.equal(run(["diff"], { cwd: root, home: ciHome }).code, 2, "base is required");
+});
+
+/** What Codex 0.160 writes for a typed prompt: a UserMessage item stamped with the turn id. */
+function codexRollout(turn: string, text: string): string {
+  const path = join(tempDir(), "rollout.jsonl");
+  const lines = [
+    { type: "session_meta", payload: { originator: "codex_exec" } },
+    { type: "event_msg", payload: { type: "task_started", turn_id: turn } },
+    { type: "event_msg", payload: { type: "item_completed", turn_id: turn, item: { type: "UserMessage", content: [{ type: "text", text }] } } }
+  ];
+  writeFileSync(path, lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
+  return path;
+}
+
+test("Codex: a typed y locks under the turn id, and verify finds it in the rollout", () => {
+  const p = project([proposal()]);
+  const transcript_path = codexRollout("turn-7", "y");
+  const r = run(["hook-prompt"], {
+    cwd: p.root, home: p.home,
+    stdin: { session_id: "th1", turn_id: "turn-7", transcript_path, cwd: p.root, hook_event_name: "UserPromptSubmit", model: "gpt-5.6-terra", permission_mode: "default", prompt: "y" }
+  });
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.json().hookSpecificOutput.hookEventName, "UserPromptSubmit", "Codex reads Claude Code's hook output");
+  const lock = readLedger(join(p.root, ".thisisfine/promises.jsonl")).find((l) => l.kind === "lock");
+  assert.ok(lock && lock.kind === "lock");
+  assert.equal(lock.agent, "codex");
+  assert.equal(lock.promptId, "turn-7");
+  const v = run(["verify"], { cwd: p.root, home: p.home });
+  assert.equal(v.code, 0, v.stdout);
+  assert.match(v.stdout, /Codex's session file shows those words typed in that turn/);
+});
+
+test("Codex: a y from a Codex an agent started (CODEX_THREAD_ID set) locks nothing", () => {
+  const p = project([proposal()]);
+  const r = run(["hook-prompt"], {
+    cwd: p.root, home: p.home, env: { CODEX_THREAD_ID: "outer" },
+    stdin: { session_id: "th1", turn_id: "turn-1", transcript_path: "", cwd: p.root, prompt: "y" }
+  });
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(readLedger(join(p.root, ".thisisfine/promises.jsonl")).some((l) => l.kind === "lock"), false);
+  assert.match(r.json().hookSpecificOutput.additionalContext, /CODEX_THREAD_ID/);
+});
+
+test("Codex: an apply_patch onto a locked check is denied in the shape Codex reads", () => {
+  const { root, home } = lockOne();
+  const command = `*** Begin Patch\n*** Update File: ${CHECK}\n@@\n-a\n+b\n*** End Patch`;
+  const r = run(["hook-guard"], { cwd: root, home, stdin: { cwd: root, turn_id: "t", tool_name: "apply_patch", tool_input: { command } } });
+  assert.equal(r.json().hookSpecificOutput.permissionDecision, "deny");
 });

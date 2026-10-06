@@ -28,6 +28,7 @@ function textOf(content: unknown): string {
 export function verifyWords(transcriptPath: string, promptId: string, words: string, agent: Agent = "claude", at = ""): WordsCheck {
   if (!transcriptPath || !existsSync(transcriptPath)) return "missing";
   if (agent === "pi") return verifyPiWords(transcriptPath, promptId, words, at);
+  if (agent === "codex") return verifyCodexWords(transcriptPath, promptId, words);
   let sawId = false;
   for (const line of readFileSync(transcriptPath, "utf8").split("\n")) {
     if (!line.includes(promptId)) continue;
@@ -84,4 +85,44 @@ function verifyPiWords(transcriptPath: string, promptId: string, words: string, 
     if (firstAfter === null && Date.parse(e.timestamp ?? "") >= since) firstAfter = text;
   }
   return firstAfter === words.trim() ? "verified" : "not-found";
+}
+
+interface CodexEntry {
+  type?: string;
+  payload?: {
+    type?: string;
+    turn_id?: string;
+    message?: unknown;
+    item?: { type?: string; content?: unknown };
+  };
+}
+
+/**
+ * Codex's rollout file keeps two copies of a prompt: the model-facing
+ * `response_item` (which also carries injected context as role "user") and
+ * a UI event. Only the event is the person's message: an `item_completed`
+ * whose item is a `UserMessage`, stamped with the turn id the hook saw.
+ * Older rollouts write a bare `user_message` event instead, after the
+ * `task_started` that opened the turn. Agent messages are `AgentMessage`
+ * items and never match.
+ */
+function verifyCodexWords(transcriptPath: string, turnId: string, words: string): WordsCheck {
+  let turn = "";
+  for (const line of readFileSync(transcriptPath, "utf8").split("\n")) {
+    if (!line.includes('"event_msg"')) continue;
+    let e: CodexEntry;
+    try {
+      e = JSON.parse(line) as CodexEntry;
+    } catch {
+      continue;
+    }
+    const p = e.payload;
+    if (e.type !== "event_msg" || !p) continue;
+    if (p.type === "task_started") turn = p.turn_id ?? "";
+    const text = p.type === "item_completed" && p.item?.type === "UserMessage" && p.turn_id === turnId
+      ? textOf(p.item.content)
+      : p.type === "user_message" && turn === turnId && typeof p.message === "string" ? p.message : null;
+    if (text !== null && text.trim() === words.trim()) return "verified";
+  }
+  return "not-found";
 }
