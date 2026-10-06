@@ -126,7 +126,7 @@ You don't need to know what a test is. You say "perfect" when something works, a
 
 ## For developers
 
-- **Zero runtime dependencies.** The plugin is plain TypeScript run by Node's built-in type stripping. Playwright is pinned and installed into `.thisisfine/` only.
+- **Zero runtime dependencies.** The plugin is plain TypeScript, run straight from the git checkout by Node's built-in type stripping, so it has no build step. The npm package ships the same code compiled to JavaScript in `dist/`, because Node won't strip types inside `node_modules`. Playwright is pinned and installed into `.thisisfine/` only.
 - **Black-box checks.** Checks can't import your code. They drive a real browser against your app on a free port (`PORT` is set, and `{port}` in the start command is replaced). Next.js and Vite are detected; anything else uses your `dev` or `start` script. Edit `.thisisfine/config.json` to change it.
 - **Fast when nothing changed.** The gate hashes the working tree (tracked and untracked files, respecting `.gitignore`) and skips the run when it matches the last green tree. On the example shop, a passing gate takes about 1.3 s and proving a new promise about 13 s.
 - **A crash is named, not guessed.** When a check fails, thisisfine opens the page once more and reports any script error with its file and line (`SyntaxError: … (/app.js:6:91)`), so a typo that kills the whole page doesn't read as just `Received: "0"`.
@@ -148,7 +148,7 @@ thisisfine can't stop an agent that is determined to cheat. It makes cheating lo
 - **Claude Code and web apps only, for now.** Other agents (Codex, Cursor, pi) and non-browser checks are out of scope for v0.
 - **It's only as good as the check.** A promise proves the check can fail when the behaviour is gone. It doesn't prove the check covers everything you had in mind. That's why the sentence is short, and why a person has to say yes.
 - **Your app runs in your folder.** If a check clicks Save, it really saves, before every stop. `propose` names any project file the app wrote while the check ran, so you can point `start` at a scratch copy before you say yes. (We learned this the hard way: on a real app, a theme check rewrote `config.json`, and that saved setting later made the check pass with the feature broken.)
-- **Not on npm yet.** Install it as a Claude Code plugin. A standalone `npx thisisfine` needs a build step that doesn't exist yet.
+- **Not on npm yet.** The package builds and installs (`npm pack`, then `npx thisisfine --help` works), but it hasn't been published. For now, install it as a Claude Code plugin.
 
 ## FAQ
 
@@ -184,6 +184,8 @@ npm test
 ```bash
 npm run typecheck
 ```
+
+You don't need to build anything to work on it: `bin/thisisfine.mjs` runs `src/` directly whenever `src/` exists. `npm run build` compiles `src/` to `dist/` for the npm package, and `npm pack` runs it for you (`prepack`). The package ships `dist/` and leaves out `src/`, which is how the bin knows to use the compiled code.
 
 The end-to-end test installs Playwright and drives a real browser through the whole story above. It's opt-in:
 

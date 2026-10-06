@@ -46,5 +46,5 @@ test("commands and the skill have the frontmatter Claude Code needs", () => {
 
 test("the npm package ships everything the plugin needs", () => {
   const files = json("package.json").files as string[];
-  for (const f of ["bin", "src", "hooks", "commands", "skills", ".claude-plugin"]) assert.ok(files.includes(f), f);
+  for (const f of ["bin", "dist", "hooks", "commands", "skills", ".claude-plugin"]) assert.ok(files.includes(f), f);
 });

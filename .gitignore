@@ -2,3 +2,4 @@ node_modules/
 *.log
 .thisisfine/runs/
 .e2e-out/
+dist/
