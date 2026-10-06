@@ -108,7 +108,7 @@ The first `/promise` sets up `.thisisfine/` in your repo and installs Playwright
 
 You don't have to type `/promise`. When you tell Claude something works ("works!", "perfect", "lgtm"), thisisfine reminds it to offer a promise. That happens at most once every five prompts, so it won't nag.
 
-**Using pi instead?** See [integrations/pi](integrations/pi/README.md) for the extension and what it can and can't guarantee.
+**Using pi or Codex instead?** See [integrations/pi](integrations/pi/README.md) and [integrations/codex](integrations/codex/README.md) for the setup and what each can and can't guarantee.
 
 ## How it works
 
@@ -208,7 +208,7 @@ thisisfine can't stop an agent that is determined to cheat. It makes cheating lo
 - **A committed key is only as trusted as the commit that added it.** Anyone can check a signature against `.thisisfine/keys/`, but the folder itself is just files in git. An agent that slips a key past the guard and past review can sign locks of its own. They can only *add* promises, though: on your machine, only your own key can retire or replace a promise you locked, whatever keys are committed. In CI, `verify` names the key behind every lock, so a stranger's key stands out.
 - **Older locks stay per machine.** Locks made before Ed25519 signing are HMAC-signed with `~/.thisisfine/key`. They still verify on the machine that made them, and anywhere else `verify` says no committed key can check them (a failure under `--strict`). To make one checkable everywhere, retire it and lock it again.
 - **The transcript check is local.** Claude Code's transcript stays on the machine where you typed "y", so a teammate's `verify` checks the signature and the check file, not the transcript.
-- **Claude Code, pi, and web apps only, for now.** pi works through [an extension](integrations/pi/README.md) with one weaker guarantee: its session file can't prove a person typed the "y". Other agents (Codex, Cursor) and non-browser checks are out of scope for v0.
+- **Claude Code, Codex, pi, and web apps only, for now.** pi works through [an extension](integrations/pi/README.md) and Codex through [four hooks](integrations/codex/README.md), each with one weaker guarantee: their session files can't prove a person typed the "y". Codex's Windows sandbox also sometimes won't start the browser for `propose`. Other agents (Cursor) and non-browser checks are out of scope for v0.
 - **It's only as good as the check.** A promise proves the check can fail when the behaviour is gone. It doesn't prove the check covers everything you had in mind. That's why the sentence is short, and why a person has to say yes.
 - **Your app runs in your folder.** If a check clicks Save, it really saves, before every stop. `propose` names any project file the app wrote while the check ran, so you can point `start` at a scratch copy before you say yes. (We learned this the hard way: on a real app, a theme check rewrote `config.json`, and that saved setting later made the check pass with the feature broken.)
 - **Not on npm yet.** The package builds and installs (`npm pack`, then `npx thisisfine --help` works), but it hasn't been published. For now, install it as a Claude Code plugin.

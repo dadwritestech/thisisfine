@@ -1,0 +1,8 @@
+{
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "node /path/to/thisisfine/bin/thisisfine.mjs hook-session" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node /path/to/thisisfine/bin/thisisfine.mjs hook-prompt" }] }],
+    "PreToolUse": [{ "matcher": "Bash|apply_patch", "hooks": [{ "type": "command", "command": "node /path/to/thisisfine/bin/thisisfine.mjs hook-guard" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "node /path/to/thisisfine/bin/thisisfine.mjs hook-stop", "timeout": 300 }] }]
+  }
+}
