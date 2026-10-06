@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { addWorktree, applyPatch, changedSince, defaultBase, footprint, prepareWorktree, removeWorktree, repoRoot, resolveRef, snapshotCommit, treeId } from "../src/git.ts";
+import { addWorktree, applyPatch, changedSince, defaultBase, fileAtRef, footprint, prepareWorktree, removeWorktree, repoRoot, resolveRef, snapshotCommit, treeId } from "../src/git.ts";
 import { commitAll, initRepo, put, sh, tempDir } from "./helpers.ts";
 
 function repo(): string {
@@ -96,4 +96,20 @@ test("worktree add, prepare (copy + node_modules link), patch, remove", () => {
   assert.equal(existsSync(dir), false);
   assert.ok(existsSync(join(root, "node_modules/dep/index.js")), "linked node_modules survives removal");
   rmSync(join(root, "node_modules"), { recursive: true });
+});
+
+test("fileAtRef reads a file as it was at a commit, relative to a project in a subfolder", () => {
+  const root = initRepo(tempDir());
+  put(root, "web/.thisisfine/promises.jsonl", "old\n");
+  const first = commitAll(root, "one");
+  put(root, "web/.thisisfine/promises.jsonl", "new\n");
+  commitAll(root, "two");
+  assert.equal(fileAtRef(join(root, "web"), first, ".thisisfine/promises.jsonl"), "old\n");
+  assert.equal(fileAtRef(join(root, "web"), "HEAD", ".thisisfine/promises.jsonl"), "new\n");
+});
+
+test("fileAtRef is null for a file the commit doesn't have, and throws for a ref that doesn't exist", () => {
+  const root = repo();
+  assert.equal(fileAtRef(root, "HEAD", ".thisisfine/promises.jsonl"), null);
+  assert.throws(() => fileAtRef(root, "no-such-branch", ".thisisfine/promises.jsonl"), /no-such-branch/);
 });

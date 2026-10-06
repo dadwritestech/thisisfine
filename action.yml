@@ -1,0 +1,125 @@
+# thisisfine in CI: run every locked promise in a real browser, and show what
+# this pull request does to the promises (locked, retired, broken).
+#
+# Your app's own dependencies must be installed before this step (npm ci,
+# pip install, ...): the checks start the app with the "start" command in
+# .thisisfine/config.json, the same way they do on your machine.
+name: thisisfine
+description: Run every human-confirmed promise in a real browser, and post a behaviour diff on the pull request.
+author: dadwritestech
+branding:
+  icon: lock
+  color: orange
+
+inputs:
+  working-directory:
+    description: The folder that contains .thisisfine/ (for a project in a subfolder of the repo).
+    default: "."
+  base:
+    description: The commit to diff the promises against. Defaults to the pull request's base; on other events no diff is made unless you set it.
+    default: ${{ github.event.pull_request.base.sha }}
+  comment:
+    description: Post the behaviour diff as a pull request comment, updated in place on every push. Needs "pull-requests write" permission.
+    default: "true"
+  token:
+    description: Token for the pull request comment.
+    default: ${{ github.token }}
+  node-version:
+    description: Node.js version; thisisfine needs 22.18 or newer.
+    default: "22"
+
+outputs:
+  result:
+    description: '"pass" if every promise held and the ledger is intact, else "fail".'
+    value: ${{ steps.verdict.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Install Playwright into .thisisfine/
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}/.thisisfine
+      run: |
+        npm install --no-audit --no-fund --loglevel=error
+        node node_modules/@playwright/test/cli.js install --with-deps chromium
+
+    - name: Check every promise
+      id: check
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        TIF: ${{ github.action_path }}/bin/thisisfine.mjs
+        REPORT: ${{ runner.temp }}/thisisfine-report.json
+      run: |
+        set +e
+        node "$TIF" check --report "$REPORT"
+        echo "code=$?" >> "$GITHUB_OUTPUT"
+
+    - name: Behaviour diff
+      id: diff
+      if: ${{ always() && inputs.base != '' }}
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        TIF: ${{ github.action_path }}/bin/thisisfine.mjs
+        REPORT: ${{ runner.temp }}/thisisfine-report.json
+        BASE: ${{ inputs.base }}
+        OUT: ${{ runner.temp }}/thisisfine-diff.md
+      run: |
+        set +e
+        # actions/checkout fetches one commit by default; the base has to be here to read its ledger
+        git cat-file -e "$BASE^{commit}" 2>/dev/null || git fetch --no-tags --depth=1 origin "$BASE"
+        # check died before writing its report (no config, a crash): say so in the diff
+        [ -f "$REPORT" ] || echo '{"ran":false,"reason":"thisisfine check stopped before running anything (see its step)","outcomes":[]}' > "$REPORT"
+        node "$TIF" diff "$BASE" --report "$REPORT" --markdown > "$OUT"
+        code=$?
+        cat "$OUT"
+        cat "$OUT" >> "$GITHUB_STEP_SUMMARY"
+        echo "code=$code" >> "$GITHUB_OUTPUT"
+
+    - name: Comment on the pull request
+      if: ${{ always() && inputs.comment == 'true' && github.event.pull_request.number && steps.diff.outputs.code != '' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ github.event.pull_request.number }}
+        OUT: ${{ runner.temp }}/thisisfine-diff.md
+      run: |
+        marker='<!-- thisisfine-behaviour-diff -->'
+        body="$marker"$'\n'"$(cat "$OUT")"
+        id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq ".[] | select(.body | startswith(\"$marker\")) | .id" 2>/dev/null | tail -n 1 || true)
+        if [ -n "$id" ]; then
+          gh api -X PATCH "repos/$REPO/issues/comments/$id" -f body="$body" > /dev/null
+        else
+          gh api -X POST "repos/$REPO/issues/$PR/comments" -f body="$body" > /dev/null
+        fi || echo "::warning::thisisfine couldn't comment on the pull request (a fork's token is read-only). The diff is in the job summary."
+
+    - name: Keep the screenshots
+      if: ${{ always() && steps.check.outputs.code != '0' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: thisisfine-runs
+        path: ${{ inputs.working-directory }}/.thisisfine/runs/
+        if-no-files-found: ignore
+
+    - name: Verdict
+      id: verdict
+      if: ${{ always() }}
+      shell: bash
+      env:
+        CHECK: ${{ steps.check.outputs.code }}
+        DIFF: ${{ steps.diff.outputs.code }}
+      run: |
+        if [ "$CHECK" = "0" ] && { [ -z "$DIFF" ] || [ "$DIFF" = "0" ]; }; then
+          echo "result=pass" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        echo "result=fail" >> "$GITHUB_OUTPUT"
+        if [ "$CHECK" != "0" ]; then echo "::error::thisisfine: a promise is broken, or the promises couldn't be checked. See the step above."; fi
+        if [ -n "$DIFF" ] && [ "$DIFF" != "0" ]; then echo "::error::thisisfine: this branch broke a promise or rewrote the ledger. See the behaviour diff."; fi
+        exit 1

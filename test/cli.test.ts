@@ -7,7 +7,7 @@ import { fileHash } from "../src/hash.ts";
 import { readLedger } from "../src/ledger.ts";
 import { readMirror } from "../src/mirror.ts";
 import type { LedgerRecord } from "../src/types.ts";
-import { proposal, put, tempDir } from "./helpers.ts";
+import { commitAll, initRepo, proposal, put, sh, tempDir } from "./helpers.ts";
 
 const BIN = resolve("bin/thisisfine.mjs");
 const CHECK = ".thisisfine/checks/1-badge.spec.ts";
@@ -173,4 +173,98 @@ test("init writes the scaffold and reports what it detected", () => {
   assert.match(r.stdout, /Start command: npm start/);
   assert.match(r.stdout, /Not a git repository/);
   assert.match(readFileSync(join(root, ".thisisfine/package.json"), "utf8"), /"@playwright\/test": "1\.61\.0"/);
+});
+
+// ── CI: check --report and diff ─────────────────────────────────────────
+
+/** #1 locked on "your" machine and committed as the base; CI gets its own empty home. */
+function lockedRepo() {
+  const p = lockOne();
+  initRepo(p.root);
+  const base = commitAll(p.root, "lock #1");
+  return { ...p, base, ciHome: join(tempDir(), "ci-home") };
+}
+
+test("check --report: a block before anything ran is recorded as not run, with the reason", () => {
+  const { root, home } = lockOne();
+  writeFileSync(join(root, CHECK), "test.skip('badge', () => {});\n");
+  const report = join(root, "report.json");
+  const r = run(["check", "--report", report], { cwd: root, home });
+  assert.equal(r.code, 1);
+  const json = JSON.parse(readFileSync(report, "utf8"));
+  assert.equal(json.ran, false);
+  assert.match(json.reason, /#1's check was changed/);
+  assert.deepEqual(json.outcomes, []);
+});
+
+test("check --report with nothing locked: ran, nothing to report", () => {
+  const { root, home } = project([proposal()]);
+  const report = join(root, "report.json");
+  assert.equal(run(["check", "--report", report], { cwd: root, home }).code, 0);
+  assert.deepEqual(JSON.parse(readFileSync(report, "utf8")), { ran: true, reason: "", outcomes: [] });
+});
+
+test("diff: a promise locked since a base without a ledger is new; CI can't verify the signature and says so", () => {
+  const p = lockOne();
+  initRepo(p.root);
+  sh(p.root, "git", ["commit", "-q", "--allow-empty", "-m", "empty"]);
+  const base = sh(p.root, "git", ["rev-parse", "HEAD"]);
+  commitAll(p.root, "lock #1");
+  const r = run(["diff", base], { cwd: p.root, home: join(tempDir(), "ci-home") });
+  assert.equal(r.code, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /^\+ #1 locked: "Badge shows the cart count" 🟡 unproven \("y", /m);
+  assert.match(r.stdout, /1 new confirmation was signed on another machine/);
+});
+
+test("diff: a retirement on the branch is listed with the human's reason", () => {
+  const { root, home, base, ciHome } = lockedRepo();
+  assert.equal(run(["retire", "1", "--reason", "badge removed by design"], { cwd: root, home }).code, 0);
+  run(["hook-prompt"], { cwd: root, home, stdin: { prompt: "yes", prompt_id: "pr2", session_id: "s1", transcript_path: "", cwd: root } });
+  const r = run(["diff", base], { cwd: root, home: ciHome });
+  assert.equal(r.code, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /^- #1 retired: "Badge shows the cart count" \(badge removed by design\)$/m);
+});
+
+test("diff: on the machine that signed, new confirmations are verified, so no note", () => {
+  const p = lockOne();
+  initRepo(p.root);
+  sh(p.root, "git", ["commit", "-q", "--allow-empty", "-m", "empty"]);
+  const r = run(["diff", "HEAD"], { cwd: p.root, home: p.home });
+  assert.equal(r.code, 0, r.stdout + r.stderr);
+  assert.doesNotMatch(r.stdout, /another machine/);
+});
+
+test("diff fails when the branch rewrote the append-only ledger", () => {
+  const { root, base, ciHome } = lockedRepo();
+  const ledger = join(root, ".thisisfine/promises.jsonl");
+  writeFileSync(ledger, readFileSync(ledger, "utf8").split("\n")[0] + "\n");
+  const r = run(["diff", base], { cwd: root, home: ciHome });
+  assert.equal(r.code, 1);
+  assert.match(r.stdout, /^✗ 1 record from [0-9a-f]{7,} is missing here \(#1 lock\)/m);
+});
+
+test("diff --report marks a broken promise and fails", () => {
+  const { root, base, ciHome } = lockedRepo();
+  const report = join(tempDir(), "report.json");
+  writeFileSync(report, JSON.stringify({ ran: true, reason: "", outcomes: [{ check: CHECK, status: "failed", message: "Expected: \"2\"\nReceived: \"1\"", screenshot: null }] }));
+  const r = run(["diff", base, "--report", report], { cwd: root, home: ciHome });
+  assert.equal(r.code, 1);
+  assert.match(r.stdout, /^✗ #1 broken: "Badge shows the cart count"$/m);
+  assert.match(r.stdout, /Received: "1"/);
+});
+
+test("diff --markdown is a PR comment: heading and a diff fence", () => {
+  const { root, base, ciHome } = lockedRepo();
+  const r = run(["diff", base, "--markdown"], { cwd: root, home: ciHome });
+  assert.equal(r.code, 0, r.stderr);
+  assert.match(r.stdout, /^### thisisfine: /);
+  assert.match(r.stdout, /```diff\nNo promises changed on this branch\.\n```/);
+});
+
+test("diff names a base that doesn't exist instead of treating it as empty", () => {
+  const { root, ciHome } = lockedRepo();
+  const r = run(["diff", "no-such-branch"], { cwd: root, home: ciHome });
+  assert.equal(r.code, 1);
+  assert.match(r.stderr, /no-such-branch is not a commit/);
+  assert.equal(run(["diff"], { cwd: root, home: ciHome }).code, 2, "base is required");
 });

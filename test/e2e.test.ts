@@ -66,7 +66,7 @@ test("a shop, a badge, a yes, a refactor: thisisfine catches it", { skip: proces
   // 1. The shop as it ships: no badge.
   cpSync(resolve("examples/cart"), root, { recursive: true });
   initRepo(root);
-  commitAll(root, "Fine Coffee Co. v1");
+  const v1 = commitAll(root, "Fine Coffee Co. v1");
 
   // 2. init: scaffold + real Playwright install.
   const init = run("01-init", ["init"]);
@@ -118,6 +118,25 @@ test("a shop, a badge, a yes, a refactor: thisisfine catches it", { skip: proces
   assert.match(b.reason, /Expected[\s\S]*"2"[\s\S]*Received[\s\S]*"1"/);
   assert.doesNotMatch(b.reason, /page threw/, "a wrong number is not a crash");
   keep(b.reason, "badge-broken.png");
+
+  // 8a. The same break in CI: a runner with no key and no mirror, as the GitHub Action runs it.
+  const ciHome = join(tempDir("tif-ci-"), "home");
+  const report = join(ciHome, "..", "report.json");
+  const ci = (step: string, args: string[]) => {
+    const r = spawnSync(process.execPath, [BIN, ...args], { cwd: root, encoding: "utf8", env: { ...process.env, THISISFINE_HOME: ciHome }, timeout: 300_000 });
+    if (OUT) writeFileSync(join(OUT, `${step}.txt`), `$ thisisfine ${args.join(" ")}\n[exit ${r.status}]\n${r.stdout}${r.stderr}`);
+    return r;
+  };
+  const ciCheck = ci("06a-ci-check", ["check", "--report", report]);
+  assert.equal(ciCheck.status, 1, ciCheck.stdout + ciCheck.stderr);
+  const ciReport = JSON.parse(readFileSync(report, "utf8"));
+  assert.equal(ciReport.ran, true, "a lock signed elsewhere still runs in CI");
+  assert.equal(ciReport.outcomes[0].status, "failed");
+  const ciDiff = ci("06a-ci-diff", ["diff", v1, "--report", report, "--markdown"]);
+  assert.equal(ciDiff.status, 1, ciDiff.stdout + ciDiff.stderr);
+  assert.match(ciDiff.stdout, /^✗ #1 broken: "Adding a coffee twice shows 2 on the cart badge"$/m);
+  assert.match(ciDiff.stdout, /^\+ #1 locked: /m);
+  assert.match(ciDiff.stdout, /signed on another machine/);
 
   // 8b. A typo that kills the whole script: the gate names the error and the line, not just "Received: 0".
   edit("public/app.js", "String(new Set(cart).size)", "String(new Set(cart).size");

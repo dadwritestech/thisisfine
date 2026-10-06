@@ -139,6 +139,58 @@ You don't need to know what a test is. You say "perfect" when something works, a
 - **Agent-written tests encode whatever the code does, bugs included.** Promises encode what a human looked at and agreed to. That's the one piece of ground truth in AI-assisted coding, and today it gets thrown away with the chat.
 - **`thisisfine verify`** audits every lock: the signature, the check file's hash, and whether Claude Code's own transcript shows a person (not a tool) typing those exact words.
 
+## In CI
+
+The Stop hook guards your own machine. The GitHub Action guards the branch: it runs every promise in a real browser on each pull request, fails the job if one is broken, and posts a **behaviour diff**, which shows what the PR does to the promises rather than to the code.
+
+```yaml
+# .github/workflows/promises.yml
+name: promises
+on: pull_request
+permissions:
+  contents: read
+  pull-requests: write   # for the comment; drop it and set comment: false to only use the job summary
+jobs:
+  thisisfine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci                            # your app's dependencies: the checks start your app
+      - uses: dadwritestech/thisisfine@main    # pin a commit SHA for anything serious
+        # with:
+        #   working-directory: web             # if .thisisfine/ isn't at the repo root
+```
+
+The action installs Playwright into `.thisisfine/` (as `init` does), runs `thisisfine check`, and then compares the ledger on the PR with the one on its base:
+
+```diff
+### thisisfine: what this branch does to the promises (vs 4f1c2e9)
+
+✗ #1 broken: "Adding a coffee twice shows 2 on the cart badge"
+    Expected: "2"
+    Received: "1"
++ #4 locked: "Logged-out visitors are sent to /login" ✅ proven ("y, perfect", Oct 6)
+- #2 retired: "The footer shows the shop's opening hours" (hours moved to the contact page)
+? #5 waiting for a human y: "Search finds a coffee by name"
+✔ 2 promises kept (#3, #4)
+```
+
+The job fails when a promise is broken, when a locked check was edited, or when the PR deleted or rewrote lines from the base's ledger (it's append-only, and CI has no home-directory copy to restore from, so this is how CI notices). Screenshots of failures are uploaded as the `thisisfine-runs` artifact.
+
+**What CI can't check:** signatures. Each lock is signed with a key that never leaves the machine where the human said yes, so a CI runner can't tell a real "y" from a forged one. The diff says so in a note under the summary instead of failing. Run `thisisfine verify` on the machine that signed.
+
+The same two commands work locally, before you push:
+
+```bash
+node <path-to-plugin>/bin/thisisfine.mjs check --report report.json
+```
+
+```bash
+node <path-to-plugin>/bin/thisisfine.mjs diff origin/main --report report.json
+```
+
 ## What it can't do
 
 thisisfine can't stop an agent that is determined to cheat. It makes cheating loud.

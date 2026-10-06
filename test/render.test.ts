@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { brokenForAgent, brokenForHuman, fineMessage, proofLine, sideEffectWarning, proposalLine, shortDate, statusText } from "../src/render.ts";
+import { brokenForAgent, brokenForHuman, diffText, fineMessage, proofLine, sideEffectWarning, proposalLine, shortDate, statusText } from "../src/render.ts";
 import { foldPromises } from "../src/promises.ts";
+import type { BehaviourDiff } from "../src/diff.ts";
 import type { Proof } from "../src/types.ts";
 import { lock, proposal, retire } from "./helpers.ts";
 
@@ -76,4 +77,71 @@ test("sideEffectWarning names the files the app wrote, and is silent when there 
   assert.match(w, /While the check ran, the app wrote to: config\.json, data\/app\.db/);
   assert.match(w, /every Stop/);
   assert.match(w, /scratch copy/);
+});
+
+function emptyDiff(): BehaviourDiff {
+  return {
+    locked: [], replaced: [], retired: [], pending: [], dropped: [], edited: [], broken: [], flaky: [], kept: [],
+    notRun: null, newSigned: [], unverifiable: [], badSignatures: [], ok: true
+  };
+}
+
+test("diff text: locks, replacements, retirements and pending, one line each", () => {
+  const folded = foldPromises([proposal(), lock({ words: "y, perfect", confirmedAt: "2026-10-04T12:00:00.000Z", proof: proven })]);
+  const p1 = folded.get(1)!;
+  const p2 = { ...p1, number: 2, sentence: "Logged-out visitors go to /login", status: "retired" as const, retire: retire({ number: 2, reason: "login moved to SSO" }) };
+  const text = diffText({
+    ...emptyDiff(),
+    locked: [p1],
+    replaced: [{ before: { ...p1, number: 3, sentence: "Old words" }, after: { ...p1, number: 3, sentence: "New words" } }],
+    retired: [p2],
+    pending: [{ proposal: proposal({ number: 5, sentence: "Search finds a coffee" }), sentence: "Search finds a coffee" }]
+  }, { base: "main", markdown: false });
+  assert.match(text, /^\+ #1 locked: "Badge shows the cart count" ✅ proven \("y, perfect", Oct 4\)$/m);
+  assert.match(text, /^~ #3 replaced: "Old words" → "New words"$/m);
+  assert.match(text, /^- #2 retired: "Logged-out visitors go to \/login" \(login moved to SSO\)$/m);
+  assert.match(text, /^\? #5 waiting for a human y: "Search finds a coffee"$/m);
+  assert.match(text, /vs main/);
+});
+
+test("diff text: problems come first and say what broke", () => {
+  const p = foldPromises([proposal(), lock()]).get(1)!;
+  const text = diffText({
+    ...emptyDiff(), ok: false,
+    broken: [{ promise: p, outcome: { check: p.check, status: "failed", message: "Expected: \"2\"\nReceived: \"1\"", screenshot: null } }],
+    edited: [p],
+    dropped: [lock()],
+    kept: [{ ...p, number: 4 }]
+  }, { base: "main", markdown: false });
+  const lines = text.split("\n");
+  const firstProblem = lines.findIndex((l) => l.startsWith("✗"));
+  assert.ok(firstProblem > 0 && firstProblem < lines.findIndex((l) => l.startsWith("✔")));
+  assert.match(text, /^✗ #1 broken: "Badge shows the cart count"$/m);
+  assert.match(text, /Received: "1"/);
+  assert.match(text, /^✗ #1's check was changed after it was locked \(\.thisisfine\/checks\/1-badge\.spec\.ts\)$/m);
+  assert.match(text, /^✗ 1 record from main is missing here \(#1 lock\)/m);
+  assert.match(text, /append-only/);
+  assert.match(text, /^✔ 1 promise kept \(#4\)$/m);
+});
+
+test("diff text: checks that didn't run, flaky ones, and a quiet branch", () => {
+  const p = foldPromises([proposal(), lock()]).get(1)!;
+  assert.match(diffText({ ...emptyDiff(), ok: false, notRun: "the app didn't start" }, { base: "main", markdown: false }), /^✗ The checks didn't run: the app didn't start$/m);
+  assert.match(diffText({ ...emptyDiff(), flaky: [p] }, { base: "main", markdown: false }), /^! #1 flaky: passed on retry$/m);
+  assert.match(diffText(emptyDiff(), { base: "main", markdown: false }), /No promises changed/);
+});
+
+test("diff text: signatures from other machines are explained, not failed", () => {
+  const text = diffText({ ...emptyDiff(), newSigned: [lock({ keyId: "abc123" })], unverifiable: [lock({ keyId: "abc123" })] }, { base: "main", markdown: false });
+  assert.match(text, /1 new confirmation was signed on another machine \(key abc123\)/);
+  assert.match(text, /thisisfine verify/);
+  const bad = diffText({ ...emptyDiff(), ok: false, badSignatures: [lock()] }, { base: "main", markdown: false });
+  assert.match(bad, /^✗ #1's lock: the signature doesn't match/m);
+});
+
+test("diff markdown: a heading, the lines in a diff fence (so + is green and - is red), the note outside", () => {
+  const text = diffText({ ...emptyDiff(), newSigned: [lock()], unverifiable: [lock()] }, { base: "main", markdown: true });
+  assert.match(text, /^### /);
+  assert.match(text, /```diff\n[\s\S]*No promises changed[\s\S]*\n```/);
+  assert.match(text.split("```").at(-1)!, /signed on another machine/);
 });

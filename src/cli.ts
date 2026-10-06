@@ -4,18 +4,20 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { loadConfig, detectConfig, writeScaffold } from "./config.ts";
+import { behaviourDiff } from "./diff.ts";
+import type { CheckReport } from "./diff.ts";
 import { decideStop } from "./gate.ts";
-import { changedSince, footprint, repoRoot, treeId } from "./git.ts";
+import { changedSince, fileAtRef, footprint, repoRoot, treeId } from "./git.ts";
 import { decideGuard } from "./guard.ts";
 import { fileHash } from "./hash.ts";
 import { integrityProblems } from "./integrity.ts";
-import { appendRecord, ledgerPath, readLedger } from "./ledger.ts";
+import { appendRecord, ledgerPath, parseLedger, readLedger } from "./ledger.ts";
 import { startApp } from "./launcher.ts";
 import { appendMirror, mirrorCheckContent, readMirror } from "./mirror.ts";
 import { decidePrompt, newProposalId } from "./prompt.ts";
 import { activePromises, foldPromises, nextNumber } from "./promises.ts";
 import { prove } from "./prove.ts";
-import { pendingMessage, proofLine, sessionContext, shortDate, sideEffectWarning, statusText } from "./render.ts";
+import { diffText, pendingMessage, proofLine, sessionContext, shortDate, sideEffectWarning, statusText } from "./render.ts";
 import { restoredLedger } from "./restore.ts";
 import { pageErrors, runChecks } from "./runner.ts";
 import { homeDir, keyIdOf, loadOrCreateKey, verifyRecord } from "./sign.ts";
@@ -33,7 +35,9 @@ Usage: thisisfine <command>
           [--base <git ref> | --sabotage <patch> --sabotage-note "..."] [--replaces <n>]
                                prove a check, then ask the human to lock it
   status                       list promises
-  check                        run every active promise now
+  check [--report <file.json>] run every active promise now (--report: write the outcomes for diff)
+  diff <base-ref> [--report <file.json>] [--markdown]
+                               what this branch does to the promises: locked, retired, broken
   retire <n> --reason "..."    ask the human to retire a promise
   verify                       audit signatures, check files, and the human's words
   restore                      put back exactly what the human confirmed
@@ -227,23 +231,61 @@ function cmdStatus(): number {
   return 0;
 }
 
-async function cmdCheck(): Promise<number> {
+async function cmdCheck(reportPath: string | undefined): Promise<number> {
   const root = requireRoot();
   const { records: all, readError } = readRecords(root);
   const state = loadState(root);
   const key = loadOrCreateKey();
+  let outcomes: CheckOutcome[] | null = null;
   const d = await decideStop({
     records: all, readError, mirror: readMirror(root), key, keyId: keyIdOf(key), hashOf: hashOf(root),
     treeId: safeTreeId(root), state: { ...state, lastGreenTree: null, lastBlockKey: null, consecutiveBlocks: 0 },
-    runAll: (checks) => runAll(root, checks, "check")
+    runAll: async (checks) => (outcomes = await runAll(root, checks, "check"))
   });
   saveState(root, { ...state, lastGreenTree: d.state.lastGreenTree });
+  if (reportPath) {
+    // blocked without outcomes = blocked before anything ran (integrity, app didn't start)
+    const ran = outcomes !== null || !d.block;
+    const report: CheckReport = { ran, reason: ran ? "" : d.systemMessage, outcomes: outcomes ?? [] };
+    const abs = resolve(process.cwd(), reportPath);
+    mkdirSync(dirname(abs), { recursive: true });
+    writeFileSync(abs, JSON.stringify(report, null, 2) + "\n");
+  }
   if (d.block) {
     out(d.reason);
     return 1;
   }
   out(d.systemMessage || "No active promises yet.");
   return 0;
+}
+
+function readReport(path: string): CheckReport {
+  const raw: unknown = JSON.parse(readFileSync(resolve(process.cwd(), path), "utf8"));
+  const r = raw as Partial<CheckReport> | null;
+  if (!r || typeof r.ran !== "boolean" || typeof r.reason !== "string" || !Array.isArray(r.outcomes)) {
+    throw new Error(`${path} is not a report written by "thisisfine check --report"`);
+  }
+  return r as CheckReport;
+}
+
+/**
+ * What a branch does to the promises, against `ref`. Read-only: a CI runner
+ * has no key of its own, and diffing must not mint one in its home dir.
+ */
+function cmdDiff(positionals: string[], v: Record<string, string | boolean | undefined>): number {
+  const root = requireRoot();
+  const ref = positionals[0];
+  if (!ref) throw new UsageError(`diff <base-ref> is required, e.g. thisisfine diff origin/main`);
+  const rel = `${STATE_DIR}/promises.jsonl`;
+  const text = fileAtRef(root, ref, rel);
+  const base = text === null ? [] : parseLedger(text, `${ref}:${rel}`);
+  const report = typeof v.report === "string" ? readReport(v.report) : null;
+  const key = existsSync(join(homeDir(), "key")) ? loadOrCreateKey() : null;
+  const d = behaviourDiff({
+    base, head: records(root), hashOf: hashOf(root), key: key ?? Buffer.alloc(32), keyId: key ? keyIdOf(key) : "", report
+  });
+  out(diffText(d, { base: ref, markdown: v.markdown === true }));
+  return d.ok ? 0 : 1;
 }
 
 function cmdRetire(positionals: string[], v: Record<string, string | boolean | undefined>): number {
@@ -460,7 +502,7 @@ async function runHook(name: string, input: HookInput): Promise<number> {
 // ── entry ───────────────────────────────────────────────────────────────
 
 const HOOKS = new Set(["hook-session", "hook-prompt", "hook-guard", "hook-stop"]);
-export const COMMANDS = ["init", "propose", "status", "check", "retire", "verify", "restore", ...HOOKS];
+export const COMMANDS = ["init", "propose", "status", "check", "diff", "retire", "verify", "restore", ...HOOKS];
 
 export async function runCli(argv: string[]): Promise<number> {
   const [command, ...rest] = argv;
@@ -487,14 +529,16 @@ export async function runCli(argv: string[]): Promise<number> {
       options: {
         sentence: { type: "string" }, check: { type: "string" }, base: { type: "string" },
         sabotage: { type: "string" }, "sabotage-note": { type: "string" }, replaces: { type: "string" },
-        reason: { type: "string" }, "no-install": { type: "boolean" }
+        reason: { type: "string" }, "no-install": { type: "boolean" },
+        report: { type: "string" }, markdown: { type: "boolean" }
       }
     });
     switch (command) {
       case "init": return cmdInit(!v["no-install"]);
       case "propose": return await cmdPropose(v);
       case "status": return cmdStatus();
-      case "check": return await cmdCheck();
+      case "check": return await cmdCheck(typeof v.report === "string" ? v.report : undefined);
+      case "diff": return cmdDiff(positionals, v);
       case "retire": return cmdRetire(positionals, v);
       case "verify": return cmdVerify();
       case "restore": return cmdRestore();

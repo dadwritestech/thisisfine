@@ -45,6 +45,20 @@ export function resolveRef(root: string, ref: string): string | null {
 }
 
 /**
+ * A file's content at a commit, or null if that commit doesn't have it.
+ * `rel` is relative to `cwd` (git's `<ref>:./path`), so a project in a
+ * subfolder of the repo works. An unknown ref throws: "no promises at base"
+ * and "base doesn't exist" must not look the same.
+ */
+export function fileAtRef(cwd: string, ref: string, rel: string): string | null {
+  const sha = resolveRef(cwd, ref);
+  if (!sha) throw new Error(`${ref} is not a commit here. In CI, fetch it first (actions/checkout with fetch-depth: 0).`);
+  const spec = `${sha}:./${rel}`;
+  if (tryGit(cwd, ["cat-file", "-e", spec]) === null) return null;
+  return gitRaw(cwd, ["show", spec]);
+}
+
+/**
  * The id of the working tree *as it is on disk*: modified and untracked
  * files included, .gitignore honoured. Computed in a throwaway copy of the
  * index so the user's staging area is never touched; copying the real index
