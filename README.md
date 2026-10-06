@@ -14,6 +14,25 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/dadwritestech/thisisfine/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/dadwritestech/thisisfine/test.yml?branch=main&amp;label=tests&amp;logo=githubactions&amp;logoColor=white&amp;style=flat-square&amp;labelColor=2b1d12" alt="Tests"></a>
+  <a href="#install"><img src="https://img.shields.io/badge/works%20with-Claude%20Code%20%C2%B7%20Codex%20%C2%B7%20pi-ff7a1a?style=flat-square&amp;labelColor=2b1d12&amp;logo=claude&amp;logoColor=white" alt="Works with Claude Code, Codex and pi"></a>
+  <img src="https://img.shields.io/badge/checks-Playwright%2C%20real%20browser-ff7a1a?style=flat-square&amp;labelColor=2b1d12" alt="Checks run in a real browser with Playwright">
+  <img src="https://img.shields.io/badge/runtime%20deps-0-ff7a1a?style=flat-square&amp;labelColor=2b1d12" alt="Zero runtime dependencies">
+  <img src="https://img.shields.io/badge/node-%E2%89%A5%2022.18-ff7a1a?style=flat-square&amp;labelColor=2b1d12&amp;logo=nodedotjs&amp;logoColor=white" alt="Node 22.18 or newer">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-ff7a1a?style=flat-square&amp;labelColor=2b1d12" alt="MIT license"></a>
+  <a href="https://github.com/dadwritestech/thisisfine/stargazers"><img src="https://img.shields.io/github/stars/dadwritestech/thisisfine?label=stars&amp;color=ff7a1a&amp;style=flat-square&amp;labelColor=2b1d12" alt="GitHub stars"></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/your%20agent-%E2%9C%85%20done%21-2ea043?style=flat-square&amp;labelColor=2b1d12" alt="Your agent: done!">
+  <img src="https://img.shields.io/badge/your%20app-%F0%9F%94%A5%20on%20fire-d1242f?style=flat-square&amp;labelColor=2b1d12" alt="Your app: on fire">
+  <img src="https://img.shields.io/badge/status-this%20is%20fine-ff4d00?style=flat-square&amp;labelColor=2b1d12" alt="Status: this is fine">
+  <img src="https://img.shields.io/badge/coffee-%E2%98%95%20still%20hot-8b5a2b?style=flat-square&amp;labelColor=2b1d12" alt="Coffee: still hot">
+  <img src="https://img.shields.io/badge/vibes-%F0%9F%94%92%20locked-6e40c9?style=flat-square&amp;labelColor=2b1d12" alt="Vibes: locked">
+  <img src="https://img.shields.io/badge/excuses%20accepted-0-57606a?style=flat-square&amp;labelColor=2b1d12" alt="Excuses accepted: 0">
+</p>
+
+<p align="center">
   <img src="docs/img/demo.gif" alt="Demo, recorded from a real end-to-end run. You ask Claude for a cart badge; thisisfine proves the check passes now and fails without the change, and the shop shows the badge at 2. You reply 'y, perfect' and promise #1 is locked. Weeks later a 'small cleanup' makes the badge count distinct products, Claude tries to stop and is blocked with '🔥 This is NOT fine', Expected 2, Received 1, and the shop shows the badge at 1. Claude's attempt to edit the check is denied, it fixes the app instead, and the turn ends with '☕ This is fine. 1/1 promises kept.'" width="100%">
 </p>
 
