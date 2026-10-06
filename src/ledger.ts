@@ -78,10 +78,15 @@ export function validateRecord(value: unknown, where: string): LedgerRecord {
  */
 export function readLedger(path: string): LedgerRecord[] {
   if (!existsSync(path)) return [];
+  return parseLedger(readFileSync(path, "utf8"), path);
+}
+
+/** Ledger text from any source (a file, `git show <ref>:…`); `source` names it in errors. */
+export function parseLedger(text: string, source: string): LedgerRecord[] {
   const out: LedgerRecord[] = [];
-  readFileSync(path, "utf8").split("\n").forEach((line, i) => {
+  text.split("\n").forEach((line, i) => {
     if (line.trim() === "") return;
-    const where = `${path} line ${i + 1}`;
+    const where = `${source} line ${i + 1}`;
     let parsed: unknown;
     try {
       parsed = JSON.parse(line);

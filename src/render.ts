@@ -1,5 +1,6 @@
 import { activePromises, foldPromises, pendingProposals } from "./promises.ts";
 import type { PromiseState } from "./promises.ts";
+import type { BehaviourDiff } from "./diff.ts";
 import type { CheckOutcome, LedgerRecord, Proof, ProposalRecord } from "./types.ts";
 
 /**
@@ -197,7 +198,64 @@ export function statusText(records: LedgerRecord[]): string {
   return [head, "", ...rows, ...pend].join("\n");
 }
 
-const ASK_TO_RETIRE = `To change it, ask the human to retire the promise (thisisfine retire <n> --reason "...") and let them answer.`;
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const numbers = (ps: { number: number }[]) => ps.map((p) => `#${p.number}`).join(", ");
+
+function describeRecord(r: LedgerRecord): string {
+  return r.kind === "dismiss" ? "a dismissal" : `#${r.number} ${r.kind === "retire" ? "retirement" : r.kind}`;
+}
+
+/**
+ * `thisisfine diff`: what a branch does to the promises, for a PR. Problems
+ * first, then the changes a reviewer should read, then what still holds.
+ * In markdown the lines sit in a ```diff fence, so GitHub paints + green and
+ * - red; the signature note stays outside it as prose.
+ */
+export function diffText(d: BehaviourDiff, opts: { base: string; markdown: boolean }): string {
+  const lines: string[] = [];
+  if (d.notRun !== null) lines.push(`✗ The checks didn't run: ${d.notRun.trim().split("\n")[0]}`);
+  for (const { promise: p, outcome: o } of d.broken) {
+    lines.push(`✗ #${p.number} broken: "${p.sentence}"`);
+    if (o.status === "missing") lines.push("    The check produced no result (deleted, renamed, or it no longer compiles).");
+    else if (o.message) lines.push(indent(o.message, "    "));
+  }
+  for (const p of d.edited) lines.push(`✗ #${p.number}'s check was changed after it was locked (${p.check})`);
+  if (d.dropped.length) {
+    lines.push(`✗ ${plural(d.dropped.length, "record")} from ${opts.base} is missing here (${d.dropped.map(describeRecord).join(", ")}).`,
+      "    promises.jsonl is append-only: a confirmation was deleted or rewritten.");
+  }
+  for (const r of d.badSignatures) lines.push(`✗ #${r.number}'s ${r.kind === "lock" ? "lock" : "retirement"}: the signature doesn't match, so it was edited after the human confirmed it`);
+
+  for (const p of d.locked) {
+    const label = p.proof?.proven ? "✅ proven" : "🟡 unproven";
+    lines.push(`+ #${p.number} locked: "${p.sentence}" ${label} ("${p.lock.words.trim()}", ${shortDate(p.lock.confirmedAt)})`);
+  }
+  for (const { before, after } of d.replaced) lines.push(`~ #${after.number} replaced: "${before.sentence}" → "${after.sentence}"`);
+  for (const p of d.retired) lines.push(`- #${p.number} retired: "${p.sentence}" (${p.retire?.reason.trim() || "no reason given"})`);
+  for (const { proposal: p, sentence } of d.pending) {
+    lines.push(p.action === "retire"
+      ? `? #${p.number} retirement waiting for a human y: "${sentence}" (${p.reason})`
+      : `? #${p.number} waiting for a human y: "${sentence}"`);
+  }
+  if (d.locked.length + d.replaced.length + d.retired.length + d.pending.length === 0) lines.push("No promises changed on this branch.");
+
+  for (const p of d.flaky) lines.push(`! #${p.number} flaky: passed on retry`);
+  if (d.kept.length) lines.push(`✔ ${plural(d.kept.length, "promise")} kept (${numbers(d.kept)})`);
+
+  let note = "";
+  if (d.unverifiable.length) {
+    const keys = [...new Set(d.unverifiable.map((r) => r.keyId))].join(", ");
+    const n = d.unverifiable.length;
+    note = `ℹ Signatures not verified: ${plural(n, "new confirmation")} ${n === 1 ? "was" : "were"} signed with a key that isn't in .thisisfine/keys/ (key ${keys}). `
+      + `Commit the public key from the machine where the human said yes (thisisfine writes it there on the first lock), or run "thisisfine verify" on that machine.`;
+  }
+
+  const title = `thisisfine: what this branch does to the promises (vs ${opts.base})`;
+  if (!opts.markdown) return [title, ...lines, ...(note ? ["", note] : [])].join("\n");
+  return [`### ${title}`, "", "```diff", ...lines, "```", ...(note ? ["", note] : [])].join("\n");
+}
+
+const ASK_TO_RETIRE =`To change it, ask the human to retire the promise (thisisfine retire <n> --reason "...") and let them answer.`;
 
 export const guardText = {
   ledger: `thisisfine: .thisisfine/promises.jsonl is written only by thisisfine, after the human says yes. Use "thisisfine status" to read it.`,

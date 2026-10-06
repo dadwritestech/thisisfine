@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { appendRecord, ledgerPath, readLedger } from "../src/ledger.ts";
+import { appendRecord, ledgerPath, parseLedger, readLedger } from "../src/ledger.ts";
 import type { DismissRecord } from "../src/types.ts";
 import { lock, proposal, tempDir } from "./helpers.ts";
 
@@ -61,4 +61,10 @@ test("blank lines are tolerated", () => {
   appendRecord(path, proposal());
   appendFileSync(path, "\n\n");
   assert.equal(readLedger(path).length, 1);
+});
+
+test("parseLedger reads ledger text from anywhere (e.g. git show) and names the source on errors", () => {
+  const text = JSON.stringify(proposal()) + "\n\n" + JSON.stringify(proposal({ id: "p2", number: 2 })) + "\n";
+  assert.equal(parseLedger(text, "main:.thisisfine/promises.jsonl").length, 2);
+  assert.throws(() => parseLedger("{nope\n", "main:.thisisfine/promises.jsonl"), /main:\.thisisfine\/promises\.jsonl line 1/);
 });

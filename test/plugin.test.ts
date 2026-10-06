@@ -48,3 +48,21 @@ test("the npm package ships everything the plugin needs", () => {
   const files = json("package.json").files as string[];
   for (const f of ["bin", "dist", "hooks", "commands", "skills", ".claude-plugin"]) assert.ok(files.includes(f), f);
 });
+
+test("the GitHub Action installs Playwright into .thisisfine/, gates on check, and diffs with the same report", () => {
+  const action = readFileSync("action.yml", "utf8").replace(/\r\n/g, "\n");
+  assert.match(action, /^runs:\n  using: composite$/m);
+  const calls = [...action.matchAll(/node "\$TIF" (\S+)/g)].map((m) => m[1]!);
+  assert.ok(calls.length >= 2);
+  for (const c of calls) assert.ok(COMMANDS.includes(c), `${c} is not a CLI command`);
+  assert.match(action, /TIF: \$\{\{ github\.action_path \}\}\/bin\/thisisfine\.mjs/);
+  assert.match(action, /working-directory: \$\{\{ inputs\.working-directory \}\}\/\.thisisfine\n\s+run: \|\n\s+npm install/);
+  assert.match(action, /install --with-deps chromium/);
+  assert.match(action, /node "\$TIF" check --report "\$REPORT"/);
+  assert.match(action, /node "\$TIF" diff "\$BASE" --report "\$REPORT" --markdown/);
+  // the verdict comes last and looks at both
+  const verdict = action.slice(action.lastIndexOf("- name:"));
+  assert.match(verdict, /steps\.check\.outputs\.code/);
+  assert.match(verdict, /steps\.diff\.outputs\.code/);
+  assert.match(verdict, /exit 1/);
+});

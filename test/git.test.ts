@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { addWorktree, applyPatch, blobOf, changedPaths, changedSince, defaultBase, footprint, prepareWorktree, removeWorktree, repoRoot, resolveRef, snapshotCommit, treeBlobs, treeId } from "../src/git.ts";
+import { addWorktree, applyPatch, blobOf, changedPaths, changedSince, defaultBase, fileAtRef, footprint, prepareWorktree, removeWorktree, repoRoot, resolveRef, snapshotCommit, treeBlobs, treeId } from "../src/git.ts";
 import { commitAll, initRepo, put, sh, tempDir } from "./helpers.ts";
 
 function repo(): string {
@@ -120,4 +120,20 @@ test("changedPaths lists what differs between a tree and now; null when the old 
   assert.deepEqual(changedPaths(root, t1, t2), ["app.js", "new name.js", "old name.js"], "renames show both sides");
   assert.deepEqual(changedPaths(root, t1, t1), []);
   assert.equal(changedPaths(root, "0123456789abcdef0123456789abcdef01234567", t2), null);
+});
+
+test("fileAtRef reads a file as it was at a commit, relative to a project in a subfolder", () => {
+  const root = initRepo(tempDir());
+  put(root, "web/.thisisfine/promises.jsonl", "old\n");
+  const first = commitAll(root, "one");
+  put(root, "web/.thisisfine/promises.jsonl", "new\n");
+  commitAll(root, "two");
+  assert.equal(fileAtRef(join(root, "web"), first, ".thisisfine/promises.jsonl"), "old\n");
+  assert.equal(fileAtRef(join(root, "web"), "HEAD", ".thisisfine/promises.jsonl"), "new\n");
+});
+
+test("fileAtRef is null for a file the commit doesn't have, and throws for a ref that doesn't exist", () => {
+  const root = repo();
+  assert.equal(fileAtRef(root, "HEAD", ".thisisfine/promises.jsonl"), null);
+  assert.throws(() => fileAtRef(root, "no-such-branch", ".thisisfine/promises.jsonl"), /no-such-branch/);
 });

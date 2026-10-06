@@ -148,6 +148,58 @@ You don't need to know what a test is. You say "perfect" when something works, a
 - **Verifiable by teammates and CI.** Locks are signed with Ed25519. The private key stays in `~/.thisisfine/`; the public key is written to `.thisisfine/keys/<you>.pub` the first time you lock something. Commit it, and `thisisfine verify --strict` checks every lock on any machine, without any private key. `--strict` also fails on a lock that no committed key can check, which is what CI wants.
 - **Review `.thisisfine/keys/` like code.** A key in that folder vouches for every lock it signs, so whoever can add a key there can add promises. The agent can't write there, but a person can. Put the folder under `CODEOWNERS` and treat a new key in a PR the way you'd treat a new deploy credential.
 
+## In CI
+
+The Stop hook guards your own machine. The GitHub Action guards the branch: it runs every promise in a real browser on each pull request, fails the job if one is broken, and posts a **behaviour diff**, which shows what the PR does to the promises rather than to the code.
+
+```yaml
+# .github/workflows/promises.yml
+name: promises
+on: pull_request
+permissions:
+  contents: read
+  pull-requests: write   # for the comment; drop it and set comment: false to only use the job summary
+jobs:
+  thisisfine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci                            # your app's dependencies: the checks start your app
+      - uses: dadwritestech/thisisfine@main    # pin a commit SHA for anything serious
+        # with:
+        #   working-directory: web             # if .thisisfine/ isn't at the repo root
+```
+
+The action installs Playwright into `.thisisfine/` (as `init` does), runs `thisisfine check`, and then compares the ledger on the PR with the one on its base:
+
+```diff
+### thisisfine: what this branch does to the promises (vs 4f1c2e9)
+
+✗ #1 broken: "Adding a coffee twice shows 2 on the cart badge"
+    Expected: "2"
+    Received: "1"
++ #4 locked: "Logged-out visitors are sent to /login" ✅ proven ("y, perfect", Oct 6)
+- #2 retired: "The footer shows the shop's opening hours" (hours moved to the contact page)
+? #5 waiting for a human y: "Search finds a coffee by name"
+✔ 2 promises kept (#3, #4)
+```
+
+The job fails when a promise is broken, when a locked check was edited, or when the PR deleted or rewrote lines from the base's ledger (it's append-only, and CI has no home-directory copy to restore from, so this is how CI notices). Screenshots of failures are uploaded as the `thisisfine-runs` artifact.
+
+**Signatures in CI:** each lock is signed with a private key that never leaves the machine where the human said yes, and the matching public key is written to `.thisisfine/keys/` for you to commit. CI checks every new confirmation against those committed keys: a forged or edited one fails the diff. A confirmation signed with a key that isn't committed yet gets a note under the summary instead of a failure. Run `thisisfine verify --strict` if you'd rather fail on those too.
+
+The same two commands work locally, before you push:
+
+```bash
+node <path-to-plugin>/bin/thisisfine.mjs check --report report.json
+```
+
+```bash
+node <path-to-plugin>/bin/thisisfine.mjs diff origin/main --report report.json
+```
+
 ## What it can't do
 
 thisisfine can't stop an agent that is determined to cheat. It makes cheating loud.
