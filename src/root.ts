@@ -4,8 +4,8 @@ import { STATE_DIR } from "./types.ts";
 
 /**
  * The nearest directory with `.thisisfine/config.json`. Not just `.thisisfine/`:
- * that's also the name of the home dir. Its own module so the pi extension can
- * ask "is this a thisisfine project?" without loading the whole CLI.
+ * that's also the name of the home dir. integrations/pi/index.ts keeps a copy,
+ * because the npm package doesn't ship src/.
  */
 export function findRoot(cwd: string): string | null {
   let dir = resolve(cwd);

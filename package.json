@@ -5,6 +5,12 @@
   "type": "module",
   "license": "MIT",
   "author": "dadwritestech",
+  "homepage": "https://github.com/dadwritestech/thisisfine#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dadwritestech/thisisfine.git"
+  },
+  "bugs": "https://github.com/dadwritestech/thisisfine/issues",
   "bin": {
     "thisisfine": "./bin/thisisfine.mjs"
   },

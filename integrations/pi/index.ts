@@ -1,8 +1,7 @@
 import { spawn } from "node:child_process";
-import { dirname, join } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { findRoot } from "../../src/root.ts";
-import { NESTED_AGENT_ENVS, UNDER_AGENT_ENV } from "../../src/types.ts";
 
 /**
  * thisisfine for pi. The same four guarantees as the Claude Code plugin,
@@ -35,6 +34,23 @@ interface HookResult {
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const BIN = join(REPO, "bin", "thisisfine.mjs");
+
+// Copied from src/types.ts rather than imported: the npm package ships dist/, not src/,
+// and `pi install npm:thisisfine` loads this file from there. test/pi.test.ts keeps them in step.
+export const STATE_DIR = ".thisisfine";
+export const UNDER_AGENT_ENV = "THISISFINE_UNDER_AGENT";
+export const NESTED_AGENT_ENVS = [UNDER_AGENT_ENV, "PI_SESSION_ID", "CODEX_THREAD_ID"] as const;
+
+/** Same as src/root.ts: the nearest directory with `.thisisfine/config.json`. */
+function findRoot(cwd: string): string | null {
+  let dir = resolve(cwd);
+  for (;;) {
+    if (existsSync(join(dir, STATE_DIR, "config.json"))) return dir;
+    const up = dirname(dir);
+    if (up === dir) return null;
+    dir = up;
+  }
+}
 
 /** pi's tool names, lowercase. The guard folds case, so the same rules apply as for Claude Code's. */
 const GUARDED = new Set(["bash", "read", "edit", "write", "grep", "find", "ls"]);

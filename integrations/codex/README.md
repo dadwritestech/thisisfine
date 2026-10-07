@@ -4,7 +4,13 @@ The same promises, ledger and CLI as the Claude Code plugin, driven by [Codex](h
 
 ## Install
 
-Clone thisisfine somewhere, copy [hooks.json](hooks.json) to `.codex/hooks.json` in your project, and replace `/path/to/thisisfine` with where you cloned it. Codex asks you to review new hooks before it runs them; accept these four.
+```
+npm install -g thisisfine
+```
+
+Then copy [hooks.json](hooks.json) to `.codex/hooks.json` in your project. Codex asks you to review new hooks before it runs them; accept these four.
+
+Working from a clone instead? Replace each `thisisfine` command with `node /path/to/thisisfine/bin/thisisfine.mjs`.
 
 Nothing touches your global `~/.codex/config.toml`. The hooks stay silent in any folder without `.thisisfine/config.json`, and the first `thisisfine propose` (or `thisisfine init`) sets that up.
 

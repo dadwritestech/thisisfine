@@ -132,7 +132,14 @@ The first `/promise` sets up `.thisisfine/` in your repo and installs Playwright
 
 You don't have to type `/promise`. When you tell Claude something works ("works!", "perfect", "lgtm"), thisisfine reminds it to offer a promise. That happens at most once every five prompts, so it won't nag.
 
-**Using pi or Codex instead?** See [integrations/pi](integrations/pi/README.md) and [integrations/codex](integrations/codex/README.md) for the setup and what each can and can't guarantee.
+**Using pi or Codex instead?** thisisfine is also on npm:
+
+```
+pi install npm:thisisfine        # pi
+npm install -g thisisfine        # Codex, then copy four hooks into .codex/hooks.json
+```
+
+See [integrations/pi](integrations/pi/README.md) and [integrations/codex](integrations/codex/README.md) for the setup and what each can and can't guarantee. The CLI works on its own too: `npx thisisfine status`.
 
 ## How it works
 
@@ -235,7 +242,6 @@ thisisfine can't stop an agent that is determined to cheat. It makes cheating lo
 - **Claude Code, Codex, pi, and web apps only, for now.** pi works through [an extension](integrations/pi/README.md) and Codex through [four hooks](integrations/codex/README.md), each with one weaker guarantee: their session files can't prove a person typed the "y". Codex's Windows sandbox also sometimes won't start the browser for `propose`. Other agents (Cursor) and non-browser checks are out of scope for v0.
 - **It's only as good as the check.** A promise proves the check can fail when the behaviour is gone. It doesn't prove the check covers everything you had in mind. That's why the sentence is short, and why a person has to say yes.
 - **Your app runs in your folder.** If a check clicks Save, it really saves, before every stop. `propose` names any project file the app wrote while the check ran, so you can point `start` at a scratch copy before you say yes. (We learned this the hard way: on a real app, a theme check rewrote `config.json`, and that saved setting later made the check pass with the feature broken.)
-- **Not on npm yet.** The package builds and installs (`npm pack`, then `npx thisisfine --help` works), but it hasn't been published. For now, install it as a Claude Code plugin.
 
 ## FAQ
 

@@ -4,13 +4,11 @@ The same promises, the same ledger and the same CLI as the Claude Code plugin, d
 
 ## Install
 
-Nothing is installed globally for you. Either load it for one run:
-
 ```
-pi -e /path/to/thisisfine/integrations/pi/index.ts
+pi install npm:thisisfine
 ```
 
-or add it yourself (`pi install /path/to/thisisfine`, or list `integrations/pi/index.ts` under `extensions` in your pi settings). The package's `pi` field also offers the `writing-promises` skill and the `/promise`, `/promises`, `/retire` prompts. The extension stays silent in any folder without `.thisisfine/config.json`.
+That adds the extension to your pi settings (`-l` for this project only). From a clone, `pi install /path/to/thisisfine` does the same, and `pi -e /path/to/thisisfine/integrations/pi/index.ts` loads it for one run. The package's `pi` field also offers the `writing-promises` skill and the `/promise`, `/promises`, `/retire` prompts. The extension stays silent in any folder without `.thisisfine/config.json`.
 
 ## What maps to what
 

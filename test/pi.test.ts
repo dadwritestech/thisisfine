@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import thisisfine from "../integrations/pi/index.ts";
 import type { PiApi } from "../integrations/pi/index.ts";
@@ -234,4 +234,14 @@ test("extension: an aborted run is not gated, and a clean one is let go", async 
   const pi2 = load(clean.root, clean.home);
   await pi2.fire("agent_end", { messages: [{ role: "assistant", stopReason: "stop" }] });
   assert.equal(pi2.sent.length, 0);
+});
+
+test("the extension imports nothing from src/: the npm package ships dist/, and pi loads it from node_modules", async () => {
+  const source = readFileSync(join(import.meta.dirname, "..", "integrations", "pi", "index.ts"), "utf8");
+  assert.doesNotMatch(source, /from "\.\.\/\.\.\/src\//);
+  const ext = await import("../integrations/pi/index.ts");
+  const types = await import("../src/types.ts");
+  assert.deepEqual(ext.NESTED_AGENT_ENVS, types.NESTED_AGENT_ENVS, "keep the inlined list in step with src/types.ts");
+  assert.equal(ext.UNDER_AGENT_ENV, types.UNDER_AGENT_ENV);
+  assert.equal(ext.STATE_DIR, types.STATE_DIR);
 });
