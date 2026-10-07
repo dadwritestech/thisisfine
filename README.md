@@ -198,7 +198,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm ci                            # your app's dependencies: the checks start your app
-      - uses: dadwritestech/thisisfine@main    # pin a commit SHA for anything serious
+      - uses: dadwritestech/thisisfine@v0      # follows 0.x releases; pin a commit SHA for anything serious
         # with:
         #   working-directory: web             # if .thisisfine/ isn't at the repo root
 ```
