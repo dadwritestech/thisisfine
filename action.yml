@@ -4,7 +4,7 @@
 # Your app's own dependencies must be installed before this step (npm ci,
 # pip install, ...): the checks start the app with the "start" command in
 # .thisisfine/config.json, the same way they do on your machine.
-name: thisisfine
+name: thisisfine promises
 description: Run every human-confirmed promise in a real browser, and post a behaviour diff on the pull request.
 author: dadwritestech
 branding:
