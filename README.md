@@ -135,11 +135,11 @@ You don't have to type `/promise`. When you tell Claude something works ("works!
 **Using pi or Codex instead?** thisisfine is also on npm:
 
 ```
-pi install npm:thisisfine        # pi
-npm install -g thisisfine        # Codex, then copy four hooks into .codex/hooks.json
+pi install npm:@dadwritestech/thisisfine   # pi
+npm install -g @dadwritestech/thisisfine   # Codex, then copy four hooks into .codex/hooks.json
 ```
 
-See [integrations/pi](integrations/pi/README.md) and [integrations/codex](integrations/codex/README.md) for the setup and what each can and can't guarantee. The CLI works on its own too: `npx thisisfine status`.
+See [integrations/pi](integrations/pi/README.md) and [integrations/codex](integrations/codex/README.md) for the setup and what each can and can't guarantee. The CLI works on its own too: `npx @dadwritestech/thisisfine status`. (The command is `thisisfine`; the package is scoped because npm thinks the plain name is too close to `this-is-fine`.)
 
 ## How it works
 

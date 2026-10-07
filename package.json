@@ -1,5 +1,5 @@
 {
-  "name": "thisisfine",
+  "name": "@dadwritestech/thisisfine",
   "version": "0.1.0",
   "description": "Your agent says done while your app is on fire. thisisfine locks every behaviour you said yes to into a proven browser check, and won't let the agent finish a turn that breaks one.",
   "type": "module",
@@ -11,8 +11,11 @@
     "url": "git+https://github.com/dadwritestech/thisisfine.git"
   },
   "bugs": "https://github.com/dadwritestech/thisisfine/issues",
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
-    "thisisfine": "./bin/thisisfine.mjs"
+    "thisisfine": "bin/thisisfine.mjs"
   },
   "engines": {
     "node": ">=22.18"

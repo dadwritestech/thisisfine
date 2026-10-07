@@ -5,7 +5,7 @@ The same promises, ledger and CLI as the Claude Code plugin, driven by [Codex](h
 ## Install
 
 ```
-npm install -g thisisfine
+npm install -g @dadwritestech/thisisfine
 ```
 
 Then copy [hooks.json](hooks.json) to `.codex/hooks.json` in your project. Codex asks you to review new hooks before it runs them; accept these four.

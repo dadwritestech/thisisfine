@@ -15,6 +15,19 @@ test("the npm package ships dist/ and not src/", () => {
   assert.equal(pkg.scripts.prepack, "npm run build");
 });
 
+test("the package installs a `thisisfine` command that npm publish keeps", () => {
+  // npm 11 drops a bin path written "./bin/..." at publish time (only a warning,
+  // and `npm pack` keeps it), which would leave `npx` with nothing to run.
+  const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { name: string; bin: Record<string, string> };
+  assert.deepEqual(Object.keys(pkg.bin), ["thisisfine"]);
+  for (const path of Object.values(pkg.bin)) {
+    assert.doesNotMatch(path, /^\.\//);
+    assert.ok(existsSync(path), path);
+  }
+  // "thisisfine" is too close to the npm package "this-is-fine", so the name is scoped.
+  assert.equal(pkg.name, "@dadwritestech/thisisfine");
+});
+
 test("npm run build emits plain JS that runs without type stripping", () => {
   execFileSync(process.execPath, [resolve("scripts/build.mjs")], { stdio: "pipe" });
   const files = readdirSync(DIST);

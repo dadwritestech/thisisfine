@@ -36,7 +36,7 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const BIN = join(REPO, "bin", "thisisfine.mjs");
 
 // Copied from src/types.ts rather than imported: the npm package ships dist/, not src/,
-// and `pi install npm:thisisfine` loads this file from there. test/pi.test.ts keeps them in step.
+// and `pi install npm:@dadwritestech/thisisfine` loads this file from there. test/pi.test.ts keeps them in step.
 export const STATE_DIR = ".thisisfine";
 export const UNDER_AGENT_ENV = "THISISFINE_UNDER_AGENT";
 export const NESTED_AGENT_ENVS = [UNDER_AGENT_ENV, "PI_SESSION_ID", "CODEX_THREAD_ID"] as const;
