@@ -15,6 +15,7 @@
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2022.18-ff7a1a?style=flat-square&amp;labelColor=2b1d12&amp;logo=nodedotjs&amp;logoColor=white" alt="Node 22.18 or newer">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-ff7a1a?style=flat-square&amp;labelColor=2b1d12" alt="MIT license"></a>
   <a href="https://github.com/dadwritestech/thisisfine/stargazers"><img src="https://img.shields.io/github/stars/dadwritestech/thisisfine?label=stars&amp;color=ff7a1a&amp;style=flat-square&amp;labelColor=2b1d12" alt="GitHub stars"></a>
+  <a href="https://dadwritestech.github.io/thisisfine/"><img src="https://img.shields.io/badge/%E2%96%B6%20watch-30--second%20video-ff4d00?style=flat-square&amp;labelColor=2b1d12&amp;logo=youtube&amp;logoColor=white" alt="Watch the 30-second video"></a>
 </p>
 
 <p align="center">
