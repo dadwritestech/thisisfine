@@ -230,17 +230,24 @@ function describeRecord(r: LedgerRecord): string {
  * In markdown the lines sit in a ```diff fence, so GitHub paints + green and
  * - red; the signature note stays outside it as prose.
  */
+/** A reviewer needs the assertion, not Playwright's call log and code frame (those are in the uploaded run). */
+function forReview(message: string): string {
+  return message.split(/^\s*Call log:/m)[0].split("\n").filter((l) => l.trim()).join("\n");
+}
+
 export function diffText(d: BehaviourDiff, opts: { base: string; markdown: boolean }): string {
+  // CI passes the base as a full SHA; seven characters is what GitHub shows.
+  const base = /^[0-9a-f]{40}$/.test(opts.base) ? opts.base.slice(0, 7) : opts.base;
   const lines: string[] = [];
   if (d.notRun !== null) lines.push(`✗ The checks didn't run: ${d.notRun.trim().split("\n")[0]}`);
   for (const { promise: p, outcome: o } of d.broken) {
     lines.push(`✗ #${p.number} broken: "${p.sentence}"`);
     if (o.status === "missing") lines.push("    The check produced no result (deleted, renamed, or it no longer compiles).");
-    else if (o.message) lines.push(indent(o.message, "    "));
+    else if (o.message) lines.push(indent(forReview(o.message), "    "));
   }
   for (const p of d.edited) lines.push(`✗ #${p.number}'s check was changed after it was locked (${p.check})`);
   if (d.dropped.length) {
-    lines.push(`✗ ${plural(d.dropped.length, "record")} from ${opts.base} is missing here (${d.dropped.map(describeRecord).join(", ")}).`,
+    lines.push(`✗ ${plural(d.dropped.length, "record")} from ${base} is missing here (${d.dropped.map(describeRecord).join(", ")}).`,
       "    promises.jsonl is append-only: a confirmation was deleted or rewritten.");
   }
   for (const r of d.badSignatures) lines.push(`✗ #${r.number}'s ${r.kind === "lock" ? "lock" : "retirement"}: the signature doesn't match, so it was edited after the human confirmed it`);
@@ -256,7 +263,9 @@ export function diffText(d: BehaviourDiff, opts: { base: string; markdown: boole
       ? `? #${p.number} retirement waiting for a human y: "${sentence}" (${p.reason})`
       : `? #${p.number} waiting for a human y: "${sentence}"`);
   }
-  if (d.locked.length + d.replaced.length + d.retired.length + d.pending.length === 0) lines.push("No promises changed on this branch.");
+  // Under a ✗ line, "nothing changed" reads as "all clear", so it's only said when nothing is wrong.
+  const problems = lines.length > 0;
+  if (!problems && d.locked.length + d.replaced.length + d.retired.length + d.pending.length === 0) lines.push("No promises changed on this branch.");
 
   for (const p of d.flaky) lines.push(`! #${p.number} flaky: passed on retry`);
   if (d.kept.length) lines.push(`✔ ${plural(d.kept.length, "promise")} kept (${numbers(d.kept)})`);
@@ -269,7 +278,7 @@ export function diffText(d: BehaviourDiff, opts: { base: string; markdown: boole
       + `Commit the public key from the machine where the human said yes (thisisfine writes it there on the first lock), or run "thisisfine verify" on that machine.`;
   }
 
-  const title = `thisisfine: what this branch does to the promises (vs ${opts.base})`;
+  const title = `thisisfine: what this branch does to the promises (vs ${base})`;
   if (!opts.markdown) return [title, ...lines, ...(note ? ["", note] : [])].join("\n");
   return [`### ${title}`, "", "```diff", ...lines, "```", ...(note ? ["", note] : [])].join("\n");
 }

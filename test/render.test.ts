@@ -147,6 +147,18 @@ test("diff text: problems come first and say what broke", () => {
   assert.match(text, /^✔ 1 promise kept \(#4\)$/m);
 });
 
+test("diff text for a PR: a short base, no call log, and no 'nothing changed' under a failure", () => {
+  const p = foldPromises([proposal(), lock()]).get(1)!;
+  const message = `Error: expect(locator).toHaveText(expected) failed\n\nExpected: "2"\nReceived: "1"\nTimeout: 5000ms\n\nCall log:\n  - waiting for getByTestId('badge')\n\n  12 |   await expect(page.getByTestId("badge")).toHaveText("2");`;
+  const broken = [{ promise: p, outcome: { check: p.check, status: "failed" as const, message, screenshot: null } }];
+  const text = diffText({ ...emptyDiff(), ok: false, broken }, { base: "8d2806249114065922ddc8ccc283ea967873be2e", markdown: true });
+  assert.match(text, /\(vs 8d28062\)$/m);
+  assert.match(text, /Received: "1"/);
+  assert.doesNotMatch(text, /Call log|waiting for|12 \|/);
+  assert.doesNotMatch(text, /No promises changed/);
+  assert.match(diffText(emptyDiff(), { base: "origin/main", markdown: false }), /\(vs origin\/main\)/);
+});
+
 test("diff text: checks that didn't run, flaky ones, and a quiet branch", () => {
   const p = foldPromises([proposal(), lock()]).get(1)!;
   assert.match(diffText({ ...emptyDiff(), ok: false, notRun: "the app didn't start" }, { base: "main", markdown: false }), /^✗ The checks didn't run: the app didn't start$/m);

@@ -209,15 +209,18 @@ The action installs Playwright into `.thisisfine/` (as `init` does), runs `thisi
 ### thisisfine: what this branch does to the promises (vs 4f1c2e9)
 
 ✗ #1 broken: "Adding a coffee twice shows 2 on the cart badge"
+    Error: expect(locator).toHaveText(expected) failed
+    Locator:  getByTestId('cart-count')
     Expected: "2"
     Received: "1"
+    Timeout:  5000ms
 + #4 locked: "Logged-out visitors are sent to /login" ✅ proven ("y, perfect", Oct 6)
 - #2 retired: "The footer shows the shop's opening hours" (hours moved to the contact page)
 ? #5 waiting for a human y: "Search finds a coffee by name"
 ✔ 2 promises kept (#3, #4)
 ```
 
-The job fails when a promise is broken, when a locked check was edited, or when the PR deleted or rewrote lines from the base's ledger (it's append-only, and CI has no home-directory copy to restore from, so this is how CI notices). Screenshots of failures are uploaded as the `thisisfine-runs` artifact.
+The job fails when a promise is broken, when a locked check was edited, or when the PR deleted or rewrote lines from the base's ledger (it's append-only, and CI has no home-directory copy to restore from, so this is how CI notices). The comment keeps only the assertion; Playwright's full call log and the screenshots of failures are in the `thisisfine-runs` artifact. On the next push the comment is updated in place, not posted again.
 
 **Signatures in CI:** each lock is signed with a private key that never leaves the machine where the human said yes, and the matching public key is written to `.thisisfine/keys/` for you to commit. CI checks every new confirmation against those committed keys: a forged or edited one fails the diff. A confirmation signed with a key that isn't committed yet gets a note under the summary instead of a failure. Run `thisisfine verify --strict` if you'd rather fail on those too.
 
