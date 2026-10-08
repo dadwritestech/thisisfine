@@ -1,6 +1,6 @@
 {
   "name": "@dadwritestech/thisisfine",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Your agent says done while your app is on fire. thisisfine locks every behaviour you said yes to into a proven check (browser, API or CLI), and won't let the agent finish a turn that breaks one.",
   "type": "module",
   "license": "MIT",
