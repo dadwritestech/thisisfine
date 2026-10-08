@@ -24,6 +24,8 @@ const keep = (name: string, text: string) => OUT && (mkdirSync(OUT, { recursive:
 const works = (cmd: string, args: string[]) => spawnSync(cmd, args, { timeout: 30_000, windowsHide: true }).status === 0;
 const hasPython = E2E && [["py", "-3"], ["python3"], ["python"]].some(([cmd, ...pre]) => works(cmd!, [...pre, "--version"]));
 const hasGo = E2E && works("go", ["version"]);
+/** CI sets this: a missing toolchain there is a failure, not a skip. */
+const REQUIRED = E2E && process.env.THISISFINE_E2E_REQUIRE === "1";
 
 function project(example: string) {
   const root = tempDir(`tif-e2e-${example}-`);
@@ -58,7 +60,7 @@ function project(example: string) {
 const EXPIRY = `        return None, "unknown token"\n`;
 const EXPIRY_FIX = `${EXPIRY}    if session["expires"] < time.time():\n        return None, "token expired"\n`;
 
-test("Python API: an expired token gets a 401, proven by sabotage, locked, then broken by a cleanup", { skip: !hasPython, timeout: 900_000 }, () => {
+test("Python API: an expired token gets a 401, proven by sabotage, locked, then broken by a cleanup", { skip: !hasPython && !REQUIRED, timeout: 900_000 }, () => {
   const { root, run, hook, edit, say } = project("tiny-api-py");
   commitAll(root, "Fine Notes API v1");
 
@@ -119,7 +121,7 @@ const DRY_RUN_FIX = `${DRY_RUN}		if dryRun {\n			fmt.Printf("would add: %s\\n", 
 const FLAG = `			if a != "--dry-run" {`;
 const FLAG_FIX = `			if a == "--dry-run" {\n				dryRun = true\n			} else {`;
 
-test("Go cli: --dry-run writes nothing, proven against the commit before, locked, then broken by a refactor", { skip: !hasGo, timeout: 900_000 }, () => {
+test("Go cli: --dry-run writes nothing, proven against the commit before, locked, then broken by a refactor", { skip: !hasGo && !REQUIRED, timeout: 900_000 }, () => {
   const { root, run, hook, edit, say } = project("tiny-cli-go");
   commitAll(root, "notes v1");
 
