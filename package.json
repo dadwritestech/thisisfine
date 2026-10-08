@@ -1,7 +1,7 @@
 {
   "name": "@dadwritestech/thisisfine",
-  "version": "0.1.0",
-  "description": "Your agent says done while your app is on fire. thisisfine locks every behaviour you said yes to into a proven browser check, and won't let the agent finish a turn that breaks one.",
+  "version": "0.2.0",
+  "description": "Your agent says done while your app is on fire. thisisfine locks every behaviour you said yes to into a proven check (browser, API or CLI), and won't let the agent finish a turn that breaks one.",
   "type": "module",
   "license": "MIT",
   "author": "dadwritestech",
@@ -35,6 +35,10 @@
     "codex",
     "plugin",
     "playwright",
+    "pytest",
+    "golang",
+    "api-testing",
+    "cli",
     "regression",
     "ai-agents",
     "testing",
@@ -45,7 +49,7 @@
     "prepack": "npm run build",
     "test": "node --test \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "node --test test/e2e.test.ts",
+    "test:e2e": "node --test test/e2e.test.ts test/e2e-api-cli.test.ts",
     "demo": "node scripts/demo/build.ts"
   },
   "devDependencies": {

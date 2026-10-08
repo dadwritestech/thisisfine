@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>thisisfine: promises your coding agent can't quietly break</title>
-<meta name="description" content="Your coding agent says “✅ Done” while your app is on fire. thisisfine turns every behaviour you said yes to into a locked, proven Playwright check, and won't let the agent finish a turn that breaks one. Free and MIT for Claude Code, Codex and pi.">
+<meta name="description" content="Your coding agent says “✅ Done” while your app is on fire. thisisfine turns every behaviour you said yes to into a locked, proven check (browser, API or CLI), and won't let the agent finish a turn that breaks one. Free and MIT for Claude Code, Codex and pi.">
 <link rel="canonical" href="https://dadwritestech.github.io/thisisfine/">
 <meta name="theme-color" content="#2b1d12">
 <meta property="og:type" content="website">
@@ -235,9 +235,9 @@
 <header class="hero" id="top">
   <div class="wrap">
     <div>
-      <span class="pill"><span class="dot"></span> v0.1.0 is out · free &amp; MIT</span>
+      <span class="pill"><span class="dot"></span> v0.2.0 is out: APIs and CLIs too · free &amp; MIT</span>
       <h1>Your agent says <span class="done">“done.”</span><br>Your app is <span class="fire">on&nbsp;fire.</span></h1>
-      <p class="lede">thisisfine turns every behaviour you said <b>yes</b> to into a locked, proven browser check, and <b>won't let your coding agent finish a turn that breaks one.</b> For Claude Code, Codex and pi.</p>
+      <p class="lede">thisisfine turns every behaviour you said <b>yes</b> to into a locked, proven check, in a browser, over HTTP or through your CLI, and <b>won't let your coding agent finish a turn that breaks one.</b> For Claude Code, Codex and pi.</p>
       <div class="ctas">
         <a class="btn btn-fire" href="https://github.com/dadwritestech/thisisfine" data-star>
           <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6 0-3.2 0 0 1-.3 3.4 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1 .9 2.2v3.3c0 .3.1.7.8.6A12 12 0 0 0 12 .3"/></svg>
@@ -245,7 +245,7 @@
         </a>
         <a class="btn btn-ghost" href="#install">Install in 30 seconds →</a>
       </div>
-      <div class="trust"><span>Real browser (Playwright)</span><span>Zero runtime deps</span><span>Signed, in git</span></div>
+      <div class="trust"><span>Browser · API · CLI</span><span>Zero runtime deps</span><span>Signed, in git</span></div>
     </div>
     <div class="mascot">
       <img src="img/mascot-dark.png" width="420" height="462" alt="The thisisfine mascot: a calm coffee mug with a padlock on its chest, raising a tiny cup while flames burn below">
@@ -348,7 +348,7 @@ Reply y to confirm, anything else to skip.</div>
     <div class="grid">
       <div class="card reveal"><div class="ic">🧪</div><h3>Proven, not trusted</h3><p>The check must pass on your code now, and fail on a version without the change while the app still boots. A check that can't fail is labelled 🟡 unproven.</p></div>
       <div class="card reveal"><div class="ic">🙋</div><h3>Only you can lock it</h3><p>Your reply goes through a hook, not through the agent. A whole-message yes (<code>y</code>, <code>lock it</code>, <code>👍</code>, <code>haan</code>) locks it. “Yes but make it blue” doesn't.</p></div>
-      <div class="card reveal"><div class="ic">🚧</div><h3>Every stop is a gate</h3><p>Before the agent can end a turn, every promise runs in a real browser. Broken? It's sent back with your words, the assertion and a screenshot.</p></div>
+      <div class="card reveal"><div class="ic">🚧</div><h3>Every stop is a gate</h3><p>Before the agent can end a turn, every promise runs: in a real browser, against your API, or through your CLI. Broken? It's sent back with your words, the assertion and a screenshot or the HTTP exchange.</p></div>
       <div class="card reveal"><div class="ic">✍️</div><h3>Signed and in git</h3><p>Every lock is signed with Ed25519 and kept in an append-only ledger. <code>thisisfine verify</code> audits each one, on any machine.</p></div>
       <div class="card reveal"><div class="ic">⚡</div><h3>Free when nothing changed</h3><p>The gate hashes your working tree and skips the run if it matches the last green one. On the example shop, a passing gate takes about 1.3 s.</p></div>
       <div class="card reveal"><div class="ic">🗳️</div><h3>Change your mind, out loud</h3><p><code>/retire 3 we're dropping the badge</code> asks you to confirm. Only your <code>y</code> retires a promise, never the agent's.</p></div>
@@ -394,7 +394,7 @@ Reply y to confirm, anything else to skip.</div>
     <div class="reveal">
       <p class="eyebrow">In CI</p>
       <h2>A behaviour diff on every PR</h2>
-      <p class="sub">The GitHub Action runs every promise in a real browser, fails the job if one is broken, and comments what the PR does to the promises, not just to the code.</p>
+      <p class="sub">The GitHub Action runs every promise the same way, fails the job if one is broken, and comments what the PR does to the promises, not just to the code.</p>
     </div>
     <div class="split">
       <div class="cmd reveal"><div class="term"><span class="d"># .github/workflows/promises.yml</span>
@@ -434,7 +434,7 @@ jobs:
     <ul class="reveal">
       <li><b>Tamper-evident, not tamper-proof.</b> A changed or deleted check, ledger or config blocks the next stop until <code>thisisfine restore</code> puts back what you confirmed.</li>
       <li><b>Only as good as the check.</b> It proves the check fails without the behaviour, not that it covers everything you had in mind. That's why a person has to say yes.</li>
-      <li><b>Web apps, for now.</b> Claude Code, Codex and pi. Other agents and non-browser checks are out of scope for v0.</li>
+      <li><b>Web apps, APIs and CLIs.</b> Checks in JS/TS, Python or Go, for Claude Code, Codex and pi. Other agents, libraries tested by import, and mobile or desktop UIs are out of scope for now.</li>
       <li><b>Your app runs in your folder.</b> If a check clicks Save, it really saves. <code>propose</code> names any file the app wrote, so you can point it at a scratch copy.</li>
     </ul>
   </div>

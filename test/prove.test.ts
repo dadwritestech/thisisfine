@@ -2,7 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { prove } from "../src/prove.ts";
 import type { ProveDeps } from "../src/prove.ts";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { DEFAULTS } from "../src/config.ts";
+import { tempDir } from "./helpers.ts";
 import type { CheckOutcome } from "../src/types.ts";
 
 const ROOT = "/proj";
@@ -14,9 +17,16 @@ const config = { start: "node server.js", ...DEFAULTS };
  * proof worktree is anything else. `nowStatus` / `withoutStatus` say how the
  * check behaves in each; `withoutBoots: false` makes the worktree app crash.
  */
-function deps(o: { nowStatus?: CheckOutcome["status"]; nowMessage?: string; withoutStatus?: CheckOutcome["status"]; withoutBoots?: boolean; base?: string | null }) {
+function deps(o: { nowStatus?: CheckOutcome["status"]; nowMessage?: string; withoutStatus?: CheckOutcome["status"]; withoutAgain?: CheckOutcome["status"]; withoutBoots?: boolean; base?: string | null; builds?: { now?: boolean; without?: boolean } }) {
   const calls: string[] = [];
+  let withoutRuns = 0;
   const d: ProveDeps = {
+    runBuild: async (b) => {
+      const where = b.cwd === ROOT ? "now" : "without";
+      calls.push(`build:${where}`);
+      return o.builds?.[where] === false ? { ok: false, output: "undefined: Foo" } : { ok: true, output: "" };
+    },
+    startProxy: async (target) => (calls.push(`proxy:${target}`), { url: `${target}#proxy`, stop: async () => void calls.push("proxy-stop") }),
     startApp: async (s) => {
       const where = s.cwd === ROOT ? "now" : "without";
       calls.push(`start:${where}`);
@@ -24,9 +34,11 @@ function deps(o: { nowStatus?: CheckOutcome["status"]; nowMessage?: string; with
       return { url: `http://${where}`, port: 1, stop: async () => void calls.push(`stop:${where}`) };
     },
     runChecks: async (r) => {
-      const where = r.baseUrl === "http://now" ? "now" : "without";
+      const where = r.baseUrl.startsWith("http://now") || (!r.baseUrl && !r.env?.THISISFINE_CLI_ARGV?.includes("wt")) ? "now" : "without";
       calls.push(`run:${where}:retries=${r.retries}`);
-      const status = where === "now" ? (o.nowStatus ?? "passed") : (o.withoutStatus ?? "failed");
+      if (where === "without") calls.push(`without-url:${r.baseUrl}:evidence=${r.env?.THISISFINE_EVIDENCE ? "yes" : "no"}`);
+      const again = where === "without" && withoutRuns++ > 0;
+      const status = where === "now" ? (o.nowStatus ?? "passed") : again ? (o.withoutAgain ?? o.withoutStatus ?? "failed") : (o.withoutStatus ?? "failed");
       const message = where === "now" && o.nowMessage ? o.nowMessage : status === "failed" ? "expected 3, got 0" : "";
       return [{ check: CHECK, status, message, screenshot: `${where}.png` }];
     },
@@ -56,7 +68,7 @@ test("passes now + fails on HEAD~1 while booting = proven", async () => {
   assert.equal(proof.without.message, "expected 3, got 0");
   assert.equal(proof.now.screenshot, "now.png");
   assert.ok(calls.includes("run:now:retries=0"), "now must pass first time");
-  assert.ok(calls.includes("run:without:retries=1"), "without must fail twice");
+  assert.equal(calls.filter((c) => c === "run:without:retries=0").length, 2, "without must fail twice");
   assert.ok(calls.includes("worktree:sha-of-HEAD~1"));
   assert.ok(calls.includes("stop:without") && calls.includes("remove"), "cleans up");
 });
@@ -82,6 +94,23 @@ test("passing on the base too = unproven, with a hint", async () => {
   assert.equal(proof.proven, false);
   assert.match(proof.reason, /also passes on HEAD~1/);
   assert.match(proof.reason, /--sabotage/);
+});
+
+test("the confirming run of 'without' is unrecorded, so the evidence shows one attempt", async () => {
+  const { d, calls } = deps({});
+  await prove({ root: ROOT, config, check: ".thisisfine/checks/1-token.py", runDir: "/runs/x", deps: d });
+  assert.deepEqual(calls.filter((c) => c.startsWith("without-url:")), [
+    "without-url:http://without#proxy:evidence=no",
+    "without-url:http://without:evidence=no"
+  ]);
+  assert.ok(calls.lastIndexOf("proxy-stop") < calls.lastIndexOf("run:without:retries=0"), "proxy stops before the confirming run");
+  assert.equal(calls.filter((c) => c === "proxy-stop").length, 2, "one proxy per tree, each stopped once");
+});
+
+test("failing once then passing on the base is flaky, not proof", async () => {
+  const proof = await run({ withoutAgain: "passed" }).result;
+  assert.equal(proof.proven, false);
+  assert.equal(proof.without.failed, false);
 });
 
 test("a base that doesn't boot proves nothing", async () => {
@@ -112,4 +141,73 @@ test("no earlier version and no sabotage = unproven, method none", async () => {
 
 test("an unknown --base is an error", async () => {
   await assert.rejects(run({}, { base: "nope" }).result, /unknown/);
+});
+
+test("a cli-only app: no server, the check gets the cli, and build runs in both trees", async () => {
+  const { d, calls } = deps({});
+  let seen: Record<string, string> | undefined;
+  const runChecks = d.runChecks;
+  d.runChecks = async (r) => ((seen ??= r.env), runChecks(r));
+  const proof = await prove({ root: ROOT, config: { cli: "{app}/bin/tool", build: "go build -o bin/tool .", ...DEFAULTS }, check: ".thisisfine/checks/2-x.py", runDir: "/runs/x", deps: d });
+  assert.equal(proof.proven, true);
+  assert.ok(!calls.some((c) => c.startsWith("start:")), "nothing to start");
+  assert.deepEqual(calls.filter((c) => c.startsWith("build:")), ["build:now", "build:without"]);
+  assert.deepEqual(JSON.parse(seen!.THISISFINE_CLI_ARGV!), ["/proj/bin/tool"]);
+  assert.match(seen!.THISISFINE_EVIDENCE!, /now[\\/]evidence\.txt$/);
+});
+
+test("the current code not building stops the proof; the old code not building proves nothing", async () => {
+  const cli = { cli: "tool", build: "make", ...DEFAULTS };
+  await assert.rejects(prove({ root: ROOT, config: cli, check: CHECK, runDir: "/runs/x", deps: deps({ builds: { now: false } }).d }), /build failed[\s\S]*undefined: Foo/);
+  const proof = await prove({ root: ROOT, config: cli, check: CHECK, runDir: "/runs/x", deps: deps({ builds: { without: false } }).d });
+  assert.equal(proof.proven, false);
+  assert.match(proof.reason, /doesn't build on HEAD~1, and a crash proves nothing/);
+});
+
+test("API checks go through the evidence proxy; browser checks that use page don't", async () => {
+  const { d, calls } = deps({});
+  await prove({ root: ROOT, config, check: ".thisisfine/checks/2-api.py", runDir: "/runs/x", deps: d });
+  assert.ok(calls.includes("proxy:http://now") && calls.includes("proxy:http://without"));
+  assert.equal(calls.filter((c) => c === "proxy-stop").length, 2);
+  const browser = deps({});
+  await prove({ root: ROOT, config, check: CHECK, runDir: "/runs/x", deps: browser.d });
+  assert.ok(!browser.calls.some((c) => c.startsWith("proxy:")), "unreadable source counts as a browser check");
+});
+
+test("evidence lands in the proof, root-relative; a cli that can't run means it didn't boot", async () => {
+  const root = tempDir("tif-prove-");
+  const { d } = deps({});
+  d.startApp = async (s) => ({ url: s.cwd === root ? "http://now" : "http://without", port: 1, stop: async () => {} });
+  d.startProxy = async (target, file) => {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, `GET /me → ${target.endsWith("now") ? 200 : 401}\n`);
+    return { url: target, stop: async () => {} };
+  };
+  const proof = await prove({ root, config, check: ".thisisfine/checks/2-api.py", runDir: join(root, ".thisisfine", "runs", "p"), deps: d });
+  assert.equal(proof.now.evidence, ".thisisfine/runs/p/now/evidence.txt");
+  assert.equal(proof.without.evidence, ".thisisfine/runs/p/without/evidence.txt");
+
+  const broken = deps({}).d;
+  const inner = broken.runChecks;
+  broken.runChecks = async (r) => {
+    if (r.runDir.endsWith("without")) {
+      mkdirSync(dirname(r.env!.THISISFINE_SHIM_ERRORS!), { recursive: true });
+      writeFileSync(r.env!.THISISFINE_SHIM_ERRORS!, "couldn't start bin/tool: spawn ENOENT\n");
+    }
+    return inner(r);
+  };
+  const p2 = await prove({ root, config: { cli: "bin/tool", ...DEFAULTS }, check: ".thisisfine/checks/2-x.py", runDir: join(root, "runs2"), deps: broken });
+  assert.equal(p2.proven, false);
+  assert.equal(p2.without.booted, false);
+  assert.match(p2.without.message, /couldn't start bin\/tool/);
+});
+
+test("start gets {python} and {app} too, so a stdlib app runs on the venv in either tree", async () => {
+  const { d } = deps({});
+  const starts: string[] = [];
+  const startApp = d.startApp;
+  d.startApp = async (s) => (starts.push(s.start), startApp(s));
+  await prove({ root: ROOT, config: { start: `"{python}" {app}/app.py --port {port}`, ...DEFAULTS }, check: CHECK, runDir: "/runs/x", deps: d });
+  assert.match(starts[0]!, /^"\/proj\/\.thisisfine\/\.venv\/(Scripts\/python\.exe|bin\/python)" \/proj\/app\.py --port \{port\}$/);
+  assert.match(starts[1]!, /\/tmp\/wt\/app\.py --port \{port\}$/);
 });

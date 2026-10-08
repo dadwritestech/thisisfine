@@ -4,7 +4,10 @@ import { userInfo } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { loadConfig, detectConfig, writeScaffold } from "./config.ts";
+import { cliEnv, expandTokens, runBuild, venvPython } from "./boundary.ts";
+import { checkKind, checkPathProblem, projectImports } from "./checks.ts";
+import { loadConfig, detectConfig, detectStacks, writeScaffold } from "./config.ts";
+import { PYTEST_VERSION } from "./kits.ts";
 import { behaviourDiff } from "./diff.ts";
 import type { CheckReport } from "./diff.ts";
 import { decideStop } from "./gate.ts";
@@ -18,13 +21,14 @@ import { startApp } from "./launcher.ts";
 import { appendMirror, mirrorCheckContent, readMirror } from "./mirror.ts";
 import { decidePrompt, newProposalId } from "./prompt.ts";
 import { activePromises, foldPromises, nextNumber } from "./promises.ts";
-import { prove } from "./prove.ts";
+import { BUILD_TIMEOUT_MS, prove } from "./prove.ts";
 import { findRoot } from "./root.ts";
 import { diffText, nestedContext, pendingMessage, proofLine, sessionContext, shortDate, sideEffectWarning, statusText } from "./render.ts";
 import { restoredLedger } from "./restore.ts";
 import { startRecorder } from "./recorder.ts";
 import type { Recorder } from "./recorder.ts";
-import { pageErrors, runChecks, withoutLoadErrors } from "./runner.ts";
+import { pageErrors, withoutLoadErrors } from "./runner.ts";
+import { runChecks } from "./runners.ts";
 import { buildCoverage, usesOwnHttp } from "./select.ts";
 import { buildKeyring, KEYS_DIR, publishPublicKey, readPublicKeys } from "./keys.ts";
 import { checkSignature, homeDir, loadOrCreateSigner, loadSigner } from "./sign.ts";
@@ -38,8 +42,9 @@ const USAGE = `thisisfine: promises your coding agent can't quietly break.
 
 Usage: thisisfine <command>
 
-  init                         set up .thisisfine/ here and install Playwright ${PLAYWRIGHT_VERSION} into it
-  propose --sentence "..." --check .thisisfine/checks/<file>.spec.ts
+  init                         set up .thisisfine/ here: Playwright ${PLAYWRIGHT_VERSION} for web apps, a pytest venv
+                               for Python, a go module for Go (nothing outside .thisisfine/ is touched)
+  propose --sentence "..." --check .thisisfine/checks/<file>.spec.ts | <file>.py | <dir>/check_test.go
           [--base <git ref> | --sabotage <patch> --sabotage-note "..."] [--replaces <n>]
                                prove a check, then ask the human to lock it
   status                       list promises
@@ -55,6 +60,21 @@ Hooks (run by Claude Code or the pi extension, not by hand): hook-session, hook-
 `;
 
 class UsageError extends Error {}
+
+const EVIDENCE_LINES = 12;
+
+/** What an API or cli check sent and got back, short enough to show the human before they lock it. */
+function evidenceExcerpt(root: string, label: string, file: string): string {
+  let lines: string[];
+  try {
+    lines = readFileSync(join(root, file), "utf8").trimEnd().split("\n");
+  } catch {
+    return `Evidence ${label}: ${file} (unreadable)`;
+  }
+  const shown = lines.slice(0, EVIDENCE_LINES).map((l) => `  ${l.length > 200 ? `${l.slice(0, 200)}…` : l}`);
+  if (lines.length > EVIDENCE_LINES) shown.push(`  … ${lines.length - EVIDENCE_LINES} more lines in ${file}`);
+  return [`Evidence ${label} (${file}):`, ...shown].join("\n");
+}
 
 const out = (s: string) => process.stdout.write(s.endsWith("\n") ? s : s + "\n");
 const err = (s: string) => process.stderr.write(s.endsWith("\n") ? s : s + "\n");
@@ -116,39 +136,54 @@ async function tryRecorder(root: string, tree: string | null, checks: string[]):
   }
 }
 
-/** What each check loaded, as a map of repo files; null if anything about recording went wrong. */
+/**
+ * What each check loaded, as a map of repo files; null if anything about
+ * recording went wrong. Only browser checks are recorded file by file: API
+ * and cli checks reach code we can't map to files, so they are `dynamic`
+ * and run whenever anything runs.
+ */
 async function mapOf(root: string, tree: string | null, checks: string[], rec: Recorder | null): Promise<Coverage | null> {
-  if (!rec || tree === null) return null;
+  if (tree === null) return null;
+  const browser = checks.filter((c) => checkKind(c) === "playwright");
+  const others = checks.filter((c) => checkKind(c) !== "playwright");
+  if (browser.length && !rec) return null;
   try {
-    const hits = await rec.stop();
-    const ownHttp = checks.filter((c) => usesOwnHttp(readFileSync(join(root, c), "utf8")));
-    return buildCoverage({ tree, madeAt: new Date().toISOString(), blobs: treeBlobs(root, tree), hits, ownHttp });
+    const hits = rec ? await rec.stop() : new Map();
+    const ownHttp = browser.filter((c) => usesOwnHttp(readFileSync(join(root, c), "utf8")));
+    const map = buildCoverage({ tree, madeAt: new Date().toISOString(), blobs: treeBlobs(root, tree), hits, ownHttp });
+    return { ...map, checks: [...map.checks, ...others].sort(), dynamic: [...map.dynamic, ...others].sort() };
   } catch {
     return null;
   }
 }
 
 /**
- * Boot the app once and run these checks against it. With `record`, every
- * check's browser goes through its own recording proxy, which is how the
- * gate learns which files each promise touches.
+ * Build and boot the app once and run these checks against it. With
+ * `record`, every browser check goes through its own recording proxy,
+ * which is how the gate learns which files each promise touches.
  */
 async function runAll(root: string, checks: string[], label: string, record: boolean, tree: string | null): Promise<RunResult> {
   const config = loadConfig(root);
   pruneRuns(root);
   const runDir = join(root, STATE_DIR, "runs", stamp(label));
-  const rec = record ? await tryRecorder(root, tree, checks) : null;
-  const app = await startApp({
-    cwd: root, start: config.start, readyPath: config.readyPath, readyTimeoutMs: config.readyTimeoutMs,
-    logPath: join(runDir, "app.log")
-  });
+  if (config.build) {
+    const b = await runBuild({ cwd: root, command: config.build, logPath: join(runDir, "build.log"), timeoutMs: BUILD_TIMEOUT_MS, root });
+    if (!b.ok) throw new Error(`The build failed, so no promise can be checked:\n${b.output}`);
+  }
+  const browser = checks.filter((c) => checkKind(c) === "playwright");
+  const rec = record && browser.length ? await tryRecorder(root, tree, browser) : null;
+  const app = config.start
+    ? await startApp({ cwd: root, start: expandTokens(config.start, { app: root, python: venvPython(root) }), readyPath: config.readyPath, readyTimeoutMs: config.readyTimeoutMs, logPath: join(runDir, "app.log") })
+    : null;
   try {
     const outcomes = await runChecks({
-      root, checks, baseUrl: app.url, runDir, retries: 1, timeoutMs: config.checkTimeoutMs, ...(rec ? { proxies: rec.ports } : {})
+      root, checks, baseUrl: app?.url ?? "", runDir, retries: 1, timeoutMs: config.checkTimeoutMs,
+      ...(rec ? { proxies: rec.ports } : {}),
+      ...(config.cli ? { env: cliEnv({ cli: config.cli, appDir: root, root }) } : {})
     });
     const coverage = await mapOf(root, tree, checks, rec);
-    const failed = outcomes.filter((o) => o.status === "failed" || o.status === "missing");
-    if (failed.length === 0) return { outcomes, coverage };
+    const failed = outcomes.filter((o) => (o.status === "failed" || o.status === "missing") && checkKind(o.check) === "playwright");
+    if (failed.length === 0 || !app) return { outcomes, coverage };
     const errors = await pageErrors(root, app.url);
     for (const o of failed) {
       o.pageErrors = errors;
@@ -157,17 +192,25 @@ async function runAll(root: string, checks: string[], label: string, record: boo
     return { outcomes, coverage };
   } finally {
     await rec?.stop();
-    await app.stop();
+    await app?.stop();
   }
 }
 
 function toCheckPath(root: string, raw: string): string {
   const abs = isAbsolute(raw) ? raw : resolve(process.cwd(), raw);
   const rel = relative(root, abs).replace(/\\/g, "/");
-  if (!rel.startsWith(`${STATE_DIR}/checks/`) || !rel.endsWith(".spec.ts") || rel.includes("/../")) {
-    throw new UsageError(`--check must be a .spec.ts file inside ${STATE_DIR}/checks/ (got ${raw})`);
-  }
+  const problem = checkPathProblem(rel);
+  if (problem) throw new UsageError(`--check ${raw}: ${problem}`);
   if (!existsSync(abs)) throw new UsageError(`--check ${raw}: no such file`);
+  if (checkKind(rel) === "go") {
+    // one promise, one file: the guard locks check_test.go, so nothing else may change what it compiles to
+    const extra = readdirSync(dirname(abs)).filter((f) => f !== "check_test.go");
+    if (extra.length) throw new UsageError(`--check ${raw}: a Go check's folder holds only check_test.go (found ${extra.join(", ")}); put helpers in the check itself`);
+  }
+  const reaching = projectImports(root, rel, readFileSync(abs, "utf8"));
+  if (reaching.length) {
+    throw new UsageError(`--check ${raw} imports the app's own code:\n${reaching.map((l) => `  ${l}`).join("\n")}\nChecks talk to the app from outside: HTTP, the CLI, or the browser. Rewrite it that way.`);
+  }
   return rel;
 }
 
@@ -179,31 +222,76 @@ function positiveInt(raw: string | undefined, what: string): number {
 
 // ── commands ────────────────────────────────────────────────────────────
 
+/** A Python 3.9+ to build the venv from. `py -3` first: on Windows a bare `python` can be the Store's stub, which hangs. */
+function findPython(): string[] | null {
+  for (const cmd of [["py", "-3"], ["python3"], ["python"]]) {
+    const r = spawnSync(cmd[0]!, [...cmd.slice(1), "-c", "import sys; print(sys.version_info >= (3, 9))"], { encoding: "utf8", timeout: 20_000, windowsHide: true });
+    if (r.status === 0 && r.stdout.trim() === "True") return cmd;
+  }
+  return null;
+}
+
+/** thisisfine's own venv, with pinned pytest and requests: the app's environment is never touched. */
+function setUpPython(root: string): void {
+  const dir = join(root, STATE_DIR);
+  const venvPy = venvPython(root);
+  if (!existsSync(venvPy)) {
+    const py = findPython();
+    if (!py) throw new Error(`Python checks need Python 3.9+ on PATH (tried py -3, python3, python). Install it, then run "thisisfine init" again.`);
+    out(`  Creating ${STATE_DIR}/.venv with ${py.join(" ")}...`);
+    const venv = spawnSync(py[0]!, [...py.slice(1), "-m", "venv", join(dir, ".venv")], { stdio: "inherit", windowsHide: true });
+    if (venv.status !== 0 || !existsSync(venvPy)) throw new Error(`couldn't create ${STATE_DIR}/.venv`);
+  }
+  out(`  Installing pytest ${PYTEST_VERSION} and requests into ${STATE_DIR}/.venv...`);
+  const pip = spawnSync(venvPy, ["-m", "pip", "install", "--quiet", "--disable-pip-version-check", "-r", join(dir, "requirements.txt")], { stdio: "inherit", windowsHide: true });
+  if (pip.status !== 0) throw new Error(`pip install failed in ${STATE_DIR}/.venv`);
+}
+
 function cmdInit(install: boolean): number {
   const root = repoRoot(process.cwd()) ?? resolve(process.cwd());
   const { config, detected, known } = detectConfig(root);
-  const written = writeScaffold(root, config);
+  const checksDir = join(root, STATE_DIR, "checks");
+  const existing = existsSync(checksDir) ? readdirSync(checksDir, { recursive: true }).map(String) : [];
+  const detectedStacks = detectStacks(root);
+  // checks already written decide too: a clone of a repo with Python checks needs the venv whatever the app is
+  const stacks = {
+    ...detectedStacks,
+    python: detectedStacks.python || existing.some((f) => f.endsWith(".py")),
+    go: detectedStacks.go || existing.some((f) => f.endsWith("check_test.go"))
+  };
+  const browser = stacks.node || (!stacks.python && !stacks.go) || existing.some((f) => f.endsWith(".spec.ts"));
+  const written = writeScaffold(root, config, stacks);
   const current = loadConfig(root);
-  // a start command the human already edited counts as known, whatever the project looks like
-  const guessing = !known && current.start === config.start;
+  // edges the human already edited count as known, whatever the project looks like
+  const guessing = !known && current.start === config.start && current.cli === config.cli;
   out(`thisisfine init in ${root}`);
   if (!guessing) {
     if (known) out(`  App: ${detected}`);
-    out(`  Start command: ${current.start}   (edit ${STATE_DIR}/config.json if that's wrong)`);
+    if (current.build) out(`  Build command: ${current.build}`);
+    if (current.start) out(`  Start command: ${current.start}`);
+    if (current.cli) out(`  CLI command: ${current.cli}`);
+    out(`  (edit ${STATE_DIR}/config.json if any of that is wrong)`);
   }
   if (written.length) out(`  Wrote: ${written.join(", ")}`);
   if (!repoRoot(root)) out(`  ⚠ Not a git repository. Proofs compare against an earlier commit, so run "git init" and commit first.`);
   if (install) {
-    out(`  Installing @playwright/test ${PLAYWRIGHT_VERSION} into ${STATE_DIR}/ (nothing outside it is touched)...`);
     const dir = join(root, STATE_DIR);
-    const npm = spawnSync("npm install --no-audit --no-fund --loglevel=error", { cwd: dir, shell: true, stdio: "inherit" });
-    if (npm.status !== 0) throw new Error(`npm install failed in ${dir}`);
-    const browsers = spawnSync(process.execPath, [join(dir, "node_modules", "@playwright", "test", "cli.js"), "install", "chromium"], { cwd: dir, stdio: "inherit" });
-    if (browsers.status !== 0) throw new Error("Playwright couldn't install Chromium");
+    if (browser) {
+      out(`  Installing @playwright/test ${PLAYWRIGHT_VERSION} into ${STATE_DIR}/ (nothing outside it is touched)...`);
+      const npm = spawnSync("npm install --no-audit --no-fund --loglevel=error", { cwd: dir, shell: true, stdio: "inherit" });
+      if (npm.status !== 0) throw new Error(`npm install failed in ${dir}`);
+      const browsers = spawnSync(process.execPath, [join(dir, "node_modules", "@playwright", "test", "cli.js"), "install", "chromium"], { cwd: dir, stdio: "inherit" });
+      if (browsers.status !== 0) throw new Error("Playwright couldn't install Chromium");
+    }
+    if (stacks.python) setUpPython(root);
+    if (stacks.go && spawnSync("go", ["version"], { timeout: 30_000, windowsHide: true }).status !== 0) {
+      out(`  ⚠ Go checks need the go toolchain on PATH, and "go version" didn't run. Install it from https://go.dev/dl/.`);
+    }
   }
   if (guessing) {
-    out(`  Not ready yet: set "start" in ${STATE_DIR}/config.json to the command that runs your app on {port},`);
-    out(`  e.g. "python app.py --port {port}". thisisfine fills in a free port and also sets PORT.`);
+    out(`  Not ready yet: ${detected}.`);
+    out(`  "start" runs a server on {port} (thisisfine fills in a free port and also sets PORT), e.g. "python app.py --port {port}";`);
+    out(`  "cli" is a command checks run with their own arguments, e.g. "{app}/bin/tool{exe}". Set either, or both.`);
   } else {
     out(`  Ready. Commit ${STATE_DIR}/ so promises travel with the code.`);
   }
@@ -253,6 +341,9 @@ async function cmdPropose(v: Record<string, string | boolean | undefined>): Prom
   out(proofLine(proof));
   const shots = [proof.now.screenshot && `now: ${proof.now.screenshot}`, proof.without.screenshot && `without: ${proof.without.screenshot}`].filter(Boolean);
   if (shots.length) out(`Screenshots (${shots.join(", ")})`);
+  for (const [label, file] of [["now", proof.now.evidence], ["without", proof.without.evidence]] as const) {
+    if (file) out(evidenceExcerpt(root, label, file));
+  }
   if (warning) out(warning);
   out("");
   out(warning

@@ -51,6 +51,34 @@ function looksLikeWrite(command: string): boolean {
     || /\bopen\([^)]*['"][wa]/.test(c);
 }
 
+type Locked = Map<string, ReturnType<typeof activePromises>[number]>;
+
+/** A Go check is its whole directory: any file added there joins the check's package. */
+const goDir = (check: string) => (check.endsWith("/check_test.go") ? check.slice(0, -"/check_test.go".length) : null);
+
+/** The locked promise a project-relative path belongs to: the check file itself, or anything in a locked Go check's directory. */
+function lockedOwner(locked: Locked, rel: string) {
+  const exact = locked.get(rel);
+  if (exact) return exact;
+  for (const [check, p] of locked) {
+    const dir = goDir(check);
+    if (dir && (rel === dir || rel.startsWith(`${dir}/`))) return p;
+  }
+  return undefined;
+}
+
+/**
+ * Whether a shell command names a locked check. Its file name is distinctive
+ * enough on its own; a Go check's file name is shared, so its directory name
+ * stands for it.
+ */
+function mentionsCheck(norm: string, check: string): boolean {
+  const dir = goDir(check);
+  if (!dir) return norm.includes(fold(check.slice(check.lastIndexOf("/") + 1)));
+  const name = fold(dir.slice(dir.lastIndexOf("/") + 1)).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(String.raw`(^|[/\s'"=])${name}(?![\w.-])`).test(norm);
+}
+
 /**
  * PreToolUse: the polite first line of defence. It stops the obvious ways
  * of breaking a promise without fixing the app (edit the check, edit the
@@ -81,14 +109,13 @@ export function decideGuard(i: GuardInput): GuardDecision {
     if (!hasLocks) return ALLOW;
 
     for (const p of lockedChecks.values()) {
-      const base = p.check.slice(p.check.lastIndexOf("/") + 1);
-      if (norm.includes(fold(base))) return deny(guardText.check(p.number, p.sentence));
+      if (mentionsCheck(norm, p.check)) return deny(guardText.check(p.number, p.sentence));
     }
     const mentions = norm.match(/\.thisisfine(?![\w-])[^\s'"`;&|<>)]*/g) ?? [];
     for (const m of mentions) {
       const rel = m.replace(/\/+$/, "");
-      if (rel.startsWith(`${STATE_DIR}/runs`)) continue;
-      if (/^\.thisisfine\/checks\/[^/]+$/.test(rel) && !lockedChecks.has(rel)) continue;
+      if (rel.startsWith(`${STATE_DIR}/runs`) || rel.startsWith(`${STATE_DIR}/bin`)) continue;
+      if (/^\.thisisfine\/checks\/[^/]+(\/check_test\.go)?$/.test(rel) && !lockedOwner(lockedChecks, rel)) continue;
       return deny(guardText.stateDir);
     }
     return ALLOW;
@@ -124,7 +151,7 @@ export function patchPaths(patch: string): string[] {
 
 function decidePath(
   i: GuardInput, raw: string, write: boolean, home: string, hasLocks: boolean,
-  lockedChecks: Map<string, ReturnType<typeof activePromises>[number]>
+  lockedChecks: Locked
 ): GuardDecision {
   if (inside(home, fold(slashes(resolve(i.root, raw))))) return deny(guardText.home);
   if (!write) return ALLOW;
@@ -133,9 +160,9 @@ function decidePath(
   if (rel === null || !rel.startsWith(`${STATE_DIR}/`)) return ALLOW;
   if (rel === `${STATE_DIR}/promises.jsonl`) return deny(guardText.ledger);
   if (rel === `${STATE_DIR}/keys` || rel.startsWith(`${STATE_DIR}/keys/`)) return deny(guardText.keys);
-  const p = lockedChecks.get(rel);
+  const p = lockedOwner(lockedChecks, rel);
   if (p) return deny(guardText.check(p.number, p.sentence));
-  if (hasLocks && !rel.startsWith(`${STATE_DIR}/checks/`) && !rel.startsWith(`${STATE_DIR}/runs/`)) {
+  if (hasLocks && !rel.startsWith(`${STATE_DIR}/checks/`) && !rel.startsWith(`${STATE_DIR}/runs/`) && !rel.startsWith(`${STATE_DIR}/bin/`)) {
     return deny(guardText.config(rel));
   }
   return ALLOW;

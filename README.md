@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://github.com/dadwritestech/thisisfine/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/dadwritestech/thisisfine/test.yml?branch=main&amp;label=tests&amp;logo=githubactions&amp;logoColor=white&amp;style=flat-square&amp;labelColor=2b1d12" alt="Tests"></a>
   <a href="#install"><img src="https://img.shields.io/badge/works%20with-Claude%20Code%20%C2%B7%20Codex%20%C2%B7%20pi-ff7a1a?style=flat-square&amp;labelColor=2b1d12&amp;logo=claude&amp;logoColor=white" alt="Works with Claude Code, Codex and pi"></a>
-  <img src="https://img.shields.io/badge/checks-Playwright%2C%20real%20browser-ff7a1a?style=flat-square&amp;labelColor=2b1d12" alt="Checks run in a real browser with Playwright">
+  <img src="https://img.shields.io/badge/checks-browser%20%C2%B7%20API%20%C2%B7%20CLI-ff7a1a?style=flat-square&amp;labelColor=2b1d12" alt="Checks drive a real browser, call your API, or run your CLI">
   <img src="https://img.shields.io/badge/runtime%20deps-0-ff7a1a?style=flat-square&amp;labelColor=2b1d12" alt="Zero runtime dependencies">
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2022.18-ff7a1a?style=flat-square&amp;labelColor=2b1d12&amp;logo=nodedotjs&amp;logoColor=white" alt="Node 22.18 or newer">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-ff7a1a?style=flat-square&amp;labelColor=2b1d12" alt="MIT license"></a>
@@ -29,7 +29,7 @@
 
 <p align="center">
   <b>Your coding agent says "✅ Done" while your app is on fire.</b><br>
-  thisisfine turns every behaviour you said <i>yes</i> to into a locked, proven browser check,<br>
+  thisisfine turns every behaviour you said <i>yes</i> to into a locked, proven check (browser, API or CLI),<br>
   and won't let Claude finish a turn that breaks one.
 </p>
 
@@ -40,6 +40,7 @@
 <p align="center">
   <a href="#install">Install</a> ·
   <a href="#the-30-second-story">The 30-second story</a> ·
+  <a href="#apis-and-clis">APIs and CLIs</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#what-it-cant-do">What it can't do</a> ·
   <a href="#faq">FAQ</a>
@@ -49,7 +50,7 @@
 
 It worked yesterday. You checked it yourself and told Claude "perfect". Today Claude tidied up some code, and the thing you checked is quietly broken. Nobody noticed, because the only record that it ever worked was one word in a chat that's long gone.
 
-thisisfine keeps that word. When you say yes to a behaviour, it becomes a **promise**: one sentence you agreed with, plus one Playwright check that proves it in a real browser. Before Claude can end a turn, every promise is checked. If one is broken, Claude is sent back to fix the app, with your own words quoted back to it.
+thisisfine keeps that word. When you say yes to a behaviour, it becomes a **promise**: one sentence you agreed with, plus one check that proves it from the outside: in a real browser, over HTTP, or by running your CLI. Before Claude can end a turn, every promise is checked. If one is broken, Claude is sent back to fix the app, with your own words quoted back to it.
 
 ## The 30-second story
 
@@ -112,9 +113,63 @@ thisisfine: this check is promise #1 "Adding a coffee twice shows 2 on the cart 
 Fix the app, not the check.
 ```
 
+## APIs and CLIs
+
+Not everything you say "perfect" to is on a web page. A promise can be about an API or a command-line tool too, and the check is written in the language you already use:
+
+| Your project | The check | Runs on |
+|---|---|---|
+| A web app | `.thisisfine/checks/3-badge.spec.ts` | Playwright, in a real browser |
+| An HTTP API, in Python | `.thisisfine/checks/4-expired-token.py` | pytest, in thisisfine's own venv |
+| A CLI, in Go | `.thisisfine/checks/5-dry-run/check_test.go` | `go test`, in thisisfine's own module |
+
+JS/TS projects can promise API and CLI behaviour from a `.spec.ts` too, through the `request` and `run` fixtures. Whatever the language, the check is still black-box: it calls your API over HTTP or runs your CLI as a process, and a check that imports your code is refused. `init` detects Next.js, Vite, npm scripts, a package `bin`, Go's `cmd/<name>`, Django, Flask and FastAPI. `.thisisfine/config.json` has up to three commands: `start` (a server), `cli` (what checks run), and `build` (runs before either, in both the real tree and the proof's).
+
+A check that drives no browser has no screenshot, so thisisfine records what it sent and what came back instead, and shows you both sides before you say yes. This is the [Python API example](examples/tiny-api-py), from the [end-to-end test](test/e2e-api-cli.test.ts):
+
+```
+✔ passes now ✔ fails when sabotaged (expiry check removed) (app still boots)
+Evidence now (.thisisfine/runs/…/now/evidence.txt):
+  GET /me → 401
+  < {
+  <   "error": "token expired"
+  < }
+
+  GET /me → 200
+  < {
+  <   "user": "alice"
+  < }
+Evidence without (.thisisfine/runs/…/without/evidence.txt):
+  GET /me → 200
+  < {
+  <   "user": "alice"
+  < }
+
+  GET /me → 200
+  < {
+  <   "user": "alice"
+  < }
+
+Lock in promise #1 "An expired token gets a 401"? ✔ passes now ✔ fails when sabotaged (expiry check removed) (app still boots)
+```
+
+The check makes two calls: the expired token, then a live one. With the expiry check sabotaged, the first call gets into alice's account too. The evidence keeps the method, path, status and bodies but no headers, so a bearer token stays out of it.
+
+And when a later "cleanup of the auth code" lets expired tokens back in:
+
+```
+🔥 This is NOT fine. You broke promise #1 "An expired token gets a 401".
+   The human confirmed it on Oct 8: "y"
+   Check: .thisisfine/checks/1-expired-token.py
+   Failure:
+     test_an_expired_token_gets_a_401: assert 200 == 401
+```
+
+The [Go CLI example](examples/tiny-cli-go) tells the same story about `notes add --dry-run`: the CLI is built from the commit before the fix, the check fails there, and the evidence shows `added: buy milk` against `would add: buy milk`.
+
 ## Install
 
-You need [Claude Code](https://claude.com/claude-code), Node 22.18 or newer, git, and a web app that starts with one command.
+You need [Claude Code](https://claude.com/claude-code), Node 22.18 or newer, git, and an app that starts with one command (a server, or a CLI). Python checks also need Python 3.9 or newer, and Go checks need Go.
 
 In Claude Code:
 
@@ -129,7 +184,7 @@ Then, in your project:
 /promise the cart badge shows how many items are in the cart
 ```
 
-The first `/promise` sets up `.thisisfine/` in your repo and installs Playwright *into that folder* (your own `package.json` is untouched). Commit `.thisisfine/` so your promises travel with the code.
+The first `/promise` sets up `.thisisfine/` in your repo and installs what checks run on *into that folder*: Playwright for a web app, a pytest venv for Python, a Go module for Go. Your own `package.json`, virtualenv and `go.mod` are untouched. Commit `.thisisfine/` so your promises travel with the code.
 
 You don't have to type `/promise`. When you tell Claude something works ("works!", "perfect", "lgtm"), thisisfine reminds it to offer a promise. That happens at most once every five prompts, so it won't nag.
 
@@ -150,7 +205,7 @@ See [integrations/pi](integrations/pi/README.md) and [integrations/codex](integr
                                                   fails without the change                 every stop
 ```
 
-1. **A promise is one sentence and one check.** The sentence is about something a user can see ("Logged-out visitors are sent to /login"), not how it's built. The check is a black-box [Playwright](https://playwright.dev) test in `.thisisfine/checks/`.
+1. **A promise is one sentence and one check.** The sentence is about something a user can see ("Logged-out visitors are sent to /login"), not how it's built. The check is a black-box test in `.thisisfine/checks/`: [Playwright](https://playwright.dev) for what users see in a browser, pytest or `go test` for an API or a CLI.
 2. **thisisfine proves the check, not Claude.** It starts your app and runs the check on the code as it is now: it must pass on the first try. Then it runs the check on a version *without* the change, either the previous commit or a temporary copy with a small "sabotage" patch applied. The check must fail there while the app still boots. A check that can't fail is labelled 🟡 *unproven*, so you know it's weaker.
 3. **Only you can lock it.** Your reply goes through a Claude Code hook, not through Claude. A whole-message "yes" (`y`, `yes`, `ok`, `lock it`, `y, perfect`, `👍`, `haan`, …) locks the promise. Anything else, like "yes but make it blue", skips it. thisisfine records your exact words and signs the record with a private key that lives outside the repo. Its public half goes into `.thisisfine/keys/`, so anyone with the repo can check the signature.
 4. **Every stop is a gate.** When Claude tries to end a turn, thisisfine starts the app once and runs every promise. If they all pass, Claude stops with `☕ This is fine.` If one fails, Claude is sent back with the sentence, your words, the assertion, and a screenshot. Nothing changed since the last green run? It doesn't run anything.
@@ -164,8 +219,8 @@ You don't need to know what a test is. You say "perfect" when something works, a
 
 ## For developers
 
-- **Zero runtime dependencies.** The plugin is plain TypeScript, run straight from the git checkout by Node's built-in type stripping, so it has no build step. The npm package ships the same code compiled to JavaScript in `dist/`, because Node won't strip types inside `node_modules`. Playwright is pinned and installed into `.thisisfine/` only.
-- **Black-box checks.** Checks can't import your code. They drive a real browser against your app on a free port (`PORT` is set, and `{port}` in the start command is replaced). Next.js and Vite are detected; anything else uses your `dev` or `start` script. Edit `.thisisfine/config.json` to change it.
+- **Zero runtime dependencies.** The plugin is plain TypeScript, run straight from the git checkout by Node's built-in type stripping, so it has no build step. The npm package ships the same code compiled to JavaScript in `dist/`, because Node won't strip types inside `node_modules`. Playwright, pytest and requests are pinned and installed into `.thisisfine/` only.
+- **Black-box checks.** Checks can't import your code. They drive a real browser or call your API on a free port (`PORT` is set, and `{port}` in the start command is replaced), or run your CLI in a fresh scratch folder with its own `HOME`. `{app}`, `{exe}` and `{python}` in a command stand for the tree under test, `.exe` on Windows, and thisisfine's venv. Edit `.thisisfine/config.json` to change what was detected.
 - **Fast when nothing changed.** The gate hashes the working tree (tracked and untracked files, respecting `.gitignore`) and skips the run when it matches the last green tree. On the example shop, a passing gate takes about 1.3 s and proving a new promise about 13 s.
 - **Only what a change can affect.** After a full green run, thisisfine knows which files each promise's check loaded (it records them through a local proxy, no code changes). A later change to, say, `about.html` re-checks only the promises that visit it. Anything it can't map (backend code, config, a new file) re-checks everything, and every fifth run is a full one anyway. On the example shop every promise loads the same three files, so there is nothing to skip; the gain shows up when promises cover different pages.
 - **A crash is named, not guessed.** When a check fails, thisisfine opens the page once more and reports any script error with its file and line (`SyntaxError: … (/app.js:6:91)`), so a typo that kills the whole page doesn't read as just `Received: "0"`. Errors thrown while the check itself runs (a click handler that throws) come from that check's own Playwright trace, also with file and line; failing runs keep the trace in `.thisisfine/runs/` for `npx playwright show-trace`.
@@ -204,7 +259,7 @@ jobs:
         #   working-directory: web             # if .thisisfine/ isn't at the repo root
 ```
 
-The action installs Playwright into `.thisisfine/` (as `init` does), runs `thisisfine check`, and then compares the ledger on the PR with the one on its base:
+The action sets up what your checks run on inside `.thisisfine/` (as `init` does: Playwright, a pytest venv, or neither; add `actions/setup-go` first for Go checks), runs `thisisfine check`, and then compares the ledger on the PR with the one on its base:
 
 ```diff
 ### thisisfine: what this branch does to the promises (vs 4f1c2e9)
@@ -243,7 +298,7 @@ thisisfine can't stop an agent that is determined to cheat. It makes cheating lo
 - **A committed key is only as trusted as the commit that added it.** Anyone can check a signature against `.thisisfine/keys/`, but the folder itself is just files in git. An agent that slips a key past the guard and past review can sign locks of its own. They can only *add* promises, though: on your machine, only your own key can retire or replace a promise you locked, whatever keys are committed. In CI, `verify` names the key behind every lock, so a stranger's key stands out.
 - **Older locks stay per machine.** Locks made before Ed25519 signing are HMAC-signed with `~/.thisisfine/key`. They still verify on the machine that made them, and anywhere else `verify` says no committed key can check them (a failure under `--strict`). To make one checkable everywhere, retire it and lock it again.
 - **The transcript check is local.** Claude Code's transcript stays on the machine where you typed "y", so a teammate's `verify` checks the signature and the check file, not the transcript.
-- **Claude Code, Codex, pi, and web apps only, for now.** pi works through [an extension](integrations/pi/README.md) and Codex through [four hooks](integrations/codex/README.md), each with one weaker guarantee: their session files can't prove a person typed the "y". Codex's Windows sandbox also sometimes won't start the browser for `propose`. Other agents (Cursor) and non-browser checks are out of scope for v0.
+- **Claude Code, Codex and pi; web apps, HTTP APIs and CLIs.** pi works through [an extension](integrations/pi/README.md) and Codex through [four hooks](integrations/codex/README.md), each with one weaker guarantee: their session files can't prove a person typed the "y". Codex's Windows sandbox also sometimes won't start the browser for `propose`. Other agents (Cursor), libraries tested by import, background workers, and mobile or desktop UIs are out of scope for now. Checks are in JS/TS, Python or Go.
 - **It's only as good as the check.** A promise proves the check can fail when the behaviour is gone. It doesn't prove the check covers everything you had in mind. That's why the sentence is short, and why a person has to say yes.
 - **Your app runs in your folder.** If a check clicks Save, it really saves, before every stop. `propose` names any project file the app wrote while the check ran, so you can point `start` at a scratch copy before you say yes. (We learned this the hard way: on a real app, a theme check rewrote `config.json`, and that saved setting later made the check pass with the feature broken.)
 
@@ -280,7 +335,7 @@ npm run typecheck
 
 You don't need to build anything to work on it: `bin/thisisfine.mjs` runs `src/` directly whenever `src/` exists. `npm run build` compiles `src/` to `dist/` for the npm package, and `npm pack` runs it for you (`prepack`). The package ships `dist/` and leaves out `src/`, which is how the bin knows to use the compiled code.
 
-The end-to-end test installs Playwright and drives a real browser through the whole story above. It's opt-in:
+The end-to-end tests install Playwright and drive a real browser through the whole story above, then do the same for the Python API and the Go CLI (each half skips if its toolchain isn't on PATH). They're opt-in:
 
 ```bash
 THISISFINE_E2E=1 npm run test:e2e

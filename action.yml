@@ -1,11 +1,11 @@
-# thisisfine in CI: run every locked promise in a real browser, and show what
+# thisisfine in CI: run every locked promise (browser, API or cli), and show what
 # this pull request does to the promises (locked, retired, broken).
 #
 # Your app's own dependencies must be installed before this step (npm ci,
 # pip install, ...): the checks start the app with the "start" command in
 # .thisisfine/config.json, the same way they do on your machine.
 name: thisisfine promises
-description: Run every human-confirmed promise in a real browser, and post a behaviour diff on the pull request.
+description: Run every human-confirmed promise (browser, API or CLI) and post a behaviour diff on the pull request.
 author: dadwritestech
 branding:
   icon: lock
@@ -40,12 +40,25 @@ runs:
       with:
         node-version: ${{ inputs.node-version }}
 
-    - name: Install Playwright into .thisisfine/
+    - name: Set up what the checks run on, inside .thisisfine/
       shell: bash
       working-directory: ${{ inputs.working-directory }}/.thisisfine
       run: |
-        npm install --no-audit --no-fund --loglevel=error
-        node node_modules/@playwright/test/cli.js install --with-deps chromium
+        # only what the committed checks need: Playwright for .spec.ts, a pytest venv for .py (Go checks need go on PATH)
+        if [ -z "$(find checks -name '*.py' -o -name '*.go' 2>/dev/null)" ] || [ -n "$(find checks -name '*.spec.ts' 2>/dev/null)" ]; then
+          npm install --no-audit --no-fund --loglevel=error
+          node node_modules/@playwright/test/cli.js install --with-deps chromium
+        fi
+        if [ -n "$(find checks -name '*.py' 2>/dev/null)" ]; then
+          py=$(command -v python3 || command -v python)
+          "$py" -m venv .venv
+          if [ -x .venv/bin/python ]; then vpy=.venv/bin/python; else vpy=.venv/Scripts/python.exe; fi
+          "$vpy" -m pip install --quiet --disable-pip-version-check -r requirements.txt
+        fi
+        if [ -n "$(find checks -name 'check_test.go' 2>/dev/null)" ] && ! command -v go > /dev/null; then
+          echo "::error::thisisfine: Go checks need the go toolchain. Add actions/setup-go before this step."
+          exit 1
+        fi
 
     - name: Check every promise
       id: check

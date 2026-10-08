@@ -179,7 +179,7 @@ export function dismissedContext(numbers: number[]): string {
 }
 
 export function nudgeContext(next: number): string {
-  return `[thisisfine] The human just approved something. If a specific, user-visible behaviour was just confirmed, offer to lock it in as promise #${next}: write one Playwright check for it in .thisisfine/checks/ and run "thisisfine propose". One sentence, one behaviour. If it isn't clear what was confirmed, don't.`;
+  return `[thisisfine] The human just approved something. If a specific, user-visible behaviour was just confirmed, offer to lock it in as promise #${next}: write one black-box check for it in .thisisfine/checks/ (browser, API or CLI; see the writing-promises skill) and run "thisisfine propose". One sentence, one behaviour. If it isn't clear what was confirmed, don't.`;
 }
 
 export function sessionContext(cli: string, records: LedgerRecord[]): string {
@@ -188,7 +188,7 @@ export function sessionContext(cli: string, records: LedgerRecord[]): string {
     ? active.map((p) => `  #${p.number} ${p.sentence}${p.proof?.proven ? "" : " (unproven)"}`).join("\n")
     : "  (none yet)";
   return [
-    `[thisisfine] This project has promises: behaviours the human confirmed, each locked to a Playwright check that runs in a real browser before you can finish a turn.`,
+    `[thisisfine] This project has promises: behaviours the human confirmed, each locked to a check (in a real browser, over HTTP, or through the CLI) that runs before you can finish a turn.`,
     `Active promises:`,
     list,
     `CLI: ${cli} <command>   (status | propose | check | retire)`,

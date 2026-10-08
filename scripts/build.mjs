@@ -14,3 +14,5 @@ rmSync(dist, { recursive: true, force: true });
 execFileSync(process.execPath, [tsc, "-p", join(root, "tsconfig.build.json")], { stdio: "inherit" });
 // runner.ts spawns this helper from its own directory, so it must sit next to runner.js.
 copyFileSync(join(root, "src", "page-probe.mjs"), join(dist, "page-probe.mjs"));
+// boundary.ts hands checks this shim's path from its own directory, too.
+copyFileSync(join(root, "src", "cli-shim.mjs"), join(dist, "cli-shim.mjs"));

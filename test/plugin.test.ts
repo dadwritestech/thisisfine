@@ -49,14 +49,17 @@ test("the npm package ships everything the plugin needs", () => {
   for (const f of ["bin", "dist", "hooks", "commands", "skills", ".claude-plugin"]) assert.ok(files.includes(f), f);
 });
 
-test("the GitHub Action installs Playwright into .thisisfine/, gates on check, and diffs with the same report", () => {
+test("the GitHub Action sets up what the checks need inside .thisisfine/, gates on check, and diffs with the same report", () => {
   const action = readFileSync("action.yml", "utf8").replace(/\r\n/g, "\n");
   assert.match(action, /^runs:\n  using: composite$/m);
   const calls = [...action.matchAll(/node "\$TIF" (\S+)/g)].map((m) => m[1]!);
   assert.ok(calls.length >= 2);
   for (const c of calls) assert.ok(COMMANDS.includes(c), `${c} is not a CLI command`);
   assert.match(action, /TIF: \$\{\{ github\.action_path \}\}\/bin\/thisisfine\.mjs/);
-  assert.match(action, /working-directory: \$\{\{ inputs\.working-directory \}\}\/\.thisisfine\n\s+run: \|\n\s+npm install/);
+  assert.match(action, /working-directory: \$\{\{ inputs\.working-directory \}\}\/\.thisisfine\n\s+run: \|/);
+  assert.match(action, /npm install --no-audit/);
+  assert.match(action, /-m venv \.venv/);
+  assert.match(action, /pip install .*-r requirements\.txt/);
   assert.match(action, /install --with-deps chromium/);
   assert.match(action, /node "\$TIF" check --report "\$REPORT"/);
   assert.match(action, /node "\$TIF" diff "\$BASE" --report "\$REPORT" --markdown/);
