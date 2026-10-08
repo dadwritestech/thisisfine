@@ -74,7 +74,7 @@ function recordsEvidence(root: string, check: string): boolean {
 
 const nonEmpty = (path: string) => existsSync(path) && statSync(path).size > 0;
 
-async function runOnce(d: ProveDeps, o: ProveOptions, cwd: string, label: string, retries: number): Promise<Once> {
+async function runOnce(d: ProveDeps, o: ProveOptions, cwd: string, label: string, confirm: boolean): Promise<Once> {
   const dir = join(o.runDir, label);
   const failed = (built: boolean, bootError: string): Once => ({ built, booted: false, bootError, outcome: null, evidence: null });
   if (o.config.build) {
@@ -101,10 +101,18 @@ async function runOnce(d: ProveDeps, o: ProveOptions, cwd: string, label: string
     const env = o.config.cli
       ? cliEnv({ cli: o.config.cli, appDir: cwd, root: o.root, shimErrors, ...(record ? { evidence: evidenceFile } : {}) })
       : undefined;
-    const [outcome] = await d.runChecks({
-      root: o.root, checks: [o.check], baseUrl: proxy?.url ?? app?.url ?? "", runDir: dir,
-      retries, timeoutMs: o.config.checkTimeoutMs, screenshot: "on", ...(env ? { env } : {})
+    const runChecks = (baseUrl: string, runDir: string, env?: Record<string, string>) => d.runChecks({
+      root: o.root, checks: [o.check], baseUrl, runDir, retries: 0, timeoutMs: o.config.checkTimeoutMs, screenshot: "on", ...(env ? { env } : {})
     });
+    let [outcome] = await runChecks(proxy?.url ?? app?.url ?? "", dir, env);
+    // Confirm a failure with a second, unrecorded run: a retry inside the runner would put both attempts in the evidence.
+    if (confirm && outcome?.status === "failed") {
+      await proxy?.stop();
+      proxy = null;
+      const quiet = o.config.cli ? cliEnv({ cli: o.config.cli, appDir: cwd, root: o.root, shimErrors }) : undefined;
+      const [again] = await runChecks(app?.url ?? "", join(o.runDir, `${label}-confirm`), quiet);
+      if (again?.status === "passed") outcome = { ...outcome, status: "flaky", message: "" };
+    }
     // the cli couldn't even be executed: in this tree it doesn't exist, which proves nothing
     if (nonEmpty(shimErrors)) return failed(true, `the cli couldn't run: ${readFileSync(shimErrors, "utf8").trim().split("\n")[0]}`);
     const evidence = nonEmpty(evidenceFile) ? relative(o.root, evidenceFile).replace(/\\/g, "/") : null;
@@ -124,12 +132,12 @@ async function runOnce(d: ProveDeps, o: ProveOptions, cwd: string, label: string
  *
  * Retries are asymmetric on purpose: "now" must pass on the first try (a
  * flaky check is rejected before it can be locked), "without" must fail on
- * both tries (a one-off failure is not proof).
+ * two runs (a one-off failure is not proof). Only the first is recorded.
  */
 export async function prove(o: ProveOptions): Promise<Proof> {
   const d: ProveDeps = { ...realDeps, ...o.deps };
 
-  const now = await runOnce(d, o, o.root, "now", 0);
+  const now = await runOnce(d, o, o.root, "now", false);
   if (!now.built) throw new Error(`The build failed on the current code, so nothing can be proven yet.\n${now.bootError}`);
   if (!now.booted) throw new Error(`The app didn't start, so nothing can be proven yet.\n${now.bootError}`);
   if (now.outcome?.status !== "passed") {
@@ -167,7 +175,7 @@ export async function prove(o: ProveOptions): Promise<Proof> {
     d.prepareWorktree(o.root, dir, o.config.copy);
     if (o.sabotage) d.applyPatch(dir, o.sabotage.patch);
     const where = method === "sabotage" ? "with the sabotage patch" : `on ${ref}`;
-    const w = await runOnce(d, o, dir, "without", 1);
+    const w = await runOnce(d, o, dir, "without", true);
     const without = {
       method, ref, note: o.sabotage?.note ?? null, booted: w.booted,
       failed: w.outcome?.status === "failed", message: w.outcome?.message ?? w.bootError, screenshot: w.outcome?.screenshot ?? null,

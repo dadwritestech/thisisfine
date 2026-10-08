@@ -134,7 +134,17 @@ Evidence now (.thisisfine/runs/…/now/evidence.txt):
   < {
   <   "error": "token expired"
   < }
+
+  GET /me → 200
+  < {
+  <   "user": "alice"
+  < }
 Evidence without (.thisisfine/runs/…/without/evidence.txt):
+  GET /me → 200
+  < {
+  <   "user": "alice"
+  < }
+
   GET /me → 200
   < {
   <   "user": "alice"
@@ -142,6 +152,8 @@ Evidence without (.thisisfine/runs/…/without/evidence.txt):
 
 Lock in promise #1 "An expired token gets a 401"? ✔ passes now ✔ fails when sabotaged (expiry check removed) (app still boots)
 ```
+
+The check makes two calls: the expired token, then a live one. With the expiry check sabotaged, the first call gets into alice's account too. The evidence keeps the method, path, status and bodies but no headers, so a bearer token stays out of it.
 
 And when a later "cleanup of the auth code" lets expired tokens back in:
 

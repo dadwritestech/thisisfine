@@ -17,8 +17,9 @@ const config = { start: "node server.js", ...DEFAULTS };
  * proof worktree is anything else. `nowStatus` / `withoutStatus` say how the
  * check behaves in each; `withoutBoots: false` makes the worktree app crash.
  */
-function deps(o: { nowStatus?: CheckOutcome["status"]; nowMessage?: string; withoutStatus?: CheckOutcome["status"]; withoutBoots?: boolean; base?: string | null; builds?: { now?: boolean; without?: boolean } }) {
+function deps(o: { nowStatus?: CheckOutcome["status"]; nowMessage?: string; withoutStatus?: CheckOutcome["status"]; withoutAgain?: CheckOutcome["status"]; withoutBoots?: boolean; base?: string | null; builds?: { now?: boolean; without?: boolean } }) {
   const calls: string[] = [];
+  let withoutRuns = 0;
   const d: ProveDeps = {
     runBuild: async (b) => {
       const where = b.cwd === ROOT ? "now" : "without";
@@ -35,7 +36,9 @@ function deps(o: { nowStatus?: CheckOutcome["status"]; nowMessage?: string; with
     runChecks: async (r) => {
       const where = r.baseUrl.startsWith("http://now") || (!r.baseUrl && !r.env?.THISISFINE_CLI_ARGV?.includes("wt")) ? "now" : "without";
       calls.push(`run:${where}:retries=${r.retries}`);
-      const status = where === "now" ? (o.nowStatus ?? "passed") : (o.withoutStatus ?? "failed");
+      if (where === "without") calls.push(`without-url:${r.baseUrl}:evidence=${r.env?.THISISFINE_EVIDENCE ? "yes" : "no"}`);
+      const again = where === "without" && withoutRuns++ > 0;
+      const status = where === "now" ? (o.nowStatus ?? "passed") : again ? (o.withoutAgain ?? o.withoutStatus ?? "failed") : (o.withoutStatus ?? "failed");
       const message = where === "now" && o.nowMessage ? o.nowMessage : status === "failed" ? "expected 3, got 0" : "";
       return [{ check: CHECK, status, message, screenshot: `${where}.png` }];
     },
@@ -65,7 +68,7 @@ test("passes now + fails on HEAD~1 while booting = proven", async () => {
   assert.equal(proof.without.message, "expected 3, got 0");
   assert.equal(proof.now.screenshot, "now.png");
   assert.ok(calls.includes("run:now:retries=0"), "now must pass first time");
-  assert.ok(calls.includes("run:without:retries=1"), "without must fail twice");
+  assert.equal(calls.filter((c) => c === "run:without:retries=0").length, 2, "without must fail twice");
   assert.ok(calls.includes("worktree:sha-of-HEAD~1"));
   assert.ok(calls.includes("stop:without") && calls.includes("remove"), "cleans up");
 });
@@ -91,6 +94,23 @@ test("passing on the base too = unproven, with a hint", async () => {
   assert.equal(proof.proven, false);
   assert.match(proof.reason, /also passes on HEAD~1/);
   assert.match(proof.reason, /--sabotage/);
+});
+
+test("the confirming run of 'without' is unrecorded, so the evidence shows one attempt", async () => {
+  const { d, calls } = deps({});
+  await prove({ root: ROOT, config, check: ".thisisfine/checks/1-token.py", runDir: "/runs/x", deps: d });
+  assert.deepEqual(calls.filter((c) => c.startsWith("without-url:")), [
+    "without-url:http://without#proxy:evidence=no",
+    "without-url:http://without:evidence=no"
+  ]);
+  assert.ok(calls.lastIndexOf("proxy-stop") < calls.lastIndexOf("run:without:retries=0"), "proxy stops before the confirming run");
+  assert.equal(calls.filter((c) => c === "proxy-stop").length, 2, "one proxy per tree, each stopped once");
+});
+
+test("failing once then passing on the base is flaky, not proof", async () => {
+  const proof = await run({ withoutAgain: "passed" }).result;
+  assert.equal(proof.proven, false);
+  assert.equal(proof.without.failed, false);
 });
 
 test("a base that doesn't boot proves nothing", async () => {

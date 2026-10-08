@@ -101,6 +101,8 @@ test("Python API: an expired token gets a 401, proven by sabotage, locked, then 
   keep("api-propose.txt", propose.stdout);
   assert.match(propose.stdout, /Evidence now[\s\S]*GET \/me → 401/);
   assert.match(propose.stdout, /Evidence without[\s\S]*GET \/me → 200/);
+  const without = propose.stdout.slice(propose.stdout.indexOf("Evidence without"));
+  assert.equal(without.match(/GET \/me/g)?.length, 2, "one attempt's two requests, not a retry's too");
 
   assert.match(say("y", "pr-yes").stdout, /locked/i);
   commitAll(root, "promise #1");
