@@ -57,7 +57,7 @@ function tail(path: string, lines = 15): string {
  * is not enough: on Windows taskkill takes the whole tree, on POSIX the app
  * runs in its own process group and the group is signalled.
  */
-function killTree(child: ChildProcess): Promise<void> {
+export function killTree(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) return Promise.resolve();
   const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
   if (process.platform === "win32") {
