@@ -4,7 +4,7 @@ import { userInfo } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { cliEnv, runBuild, venvPython } from "./boundary.ts";
+import { cliEnv, expandTokens, runBuild, venvPython } from "./boundary.ts";
 import { checkKind, checkPathProblem, projectImports } from "./checks.ts";
 import { loadConfig, detectConfig, detectStacks, writeScaffold } from "./config.ts";
 import { PYTEST_VERSION } from "./kits.ts";
@@ -173,7 +173,7 @@ async function runAll(root: string, checks: string[], label: string, record: boo
   const browser = checks.filter((c) => checkKind(c) === "playwright");
   const rec = record && browser.length ? await tryRecorder(root, tree, browser) : null;
   const app = config.start
-    ? await startApp({ cwd: root, start: config.start, readyPath: config.readyPath, readyTimeoutMs: config.readyTimeoutMs, logPath: join(runDir, "app.log") })
+    ? await startApp({ cwd: root, start: expandTokens(config.start, { app: root, python: venvPython(root) }), readyPath: config.readyPath, readyTimeoutMs: config.readyTimeoutMs, logPath: join(runDir, "app.log") })
     : null;
   try {
     const outcomes = await runChecks({

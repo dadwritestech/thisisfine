@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { cliEnv, runBuild } from "./boundary.ts";
+import { cliEnv, expandTokens, runBuild, venvPython } from "./boundary.ts";
 import type { BuildOptions } from "./boundary.ts";
 import { checkKind } from "./checks.ts";
 import * as gitOps from "./git.ts";
@@ -90,7 +90,7 @@ async function runOnce(d: ProveDeps, o: ProveOptions, cwd: string, label: string
     if (o.config.start) {
       try {
         app = await d.startApp({
-          cwd, start: o.config.start, readyPath: o.config.readyPath, readyTimeoutMs: o.config.readyTimeoutMs,
+          cwd, start: expandTokens(o.config.start, { app: cwd, python: venvPython(o.root) }), readyPath: o.config.readyPath, readyTimeoutMs: o.config.readyTimeoutMs,
           logPath: join(o.runDir, `${label}-app.log`)
         });
       } catch (err) {

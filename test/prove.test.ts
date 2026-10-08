@@ -181,3 +181,13 @@ test("evidence lands in the proof, root-relative; a cli that can't run means it 
   assert.equal(p2.without.booted, false);
   assert.match(p2.without.message, /couldn't start bin\/tool/);
 });
+
+test("start gets {python} and {app} too, so a stdlib app runs on the venv in either tree", async () => {
+  const { d } = deps({});
+  const starts: string[] = [];
+  const startApp = d.startApp;
+  d.startApp = async (s) => (starts.push(s.start), startApp(s));
+  await prove({ root: ROOT, config: { start: `"{python}" {app}/app.py --port {port}`, ...DEFAULTS }, check: CHECK, runDir: "/runs/x", deps: d });
+  assert.match(starts[0]!, /^"\/proj\/\.thisisfine\/\.venv\/(Scripts\/python\.exe|bin\/python)" \/proj\/app\.py --port \{port\}$/);
+  assert.match(starts[1]!, /\/tmp\/wt\/app\.py --port \{port\}$/);
+});
