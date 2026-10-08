@@ -35,6 +35,7 @@ test("npm run build emits plain JS that runs without type stripping", () => {
     assert.ok(files.includes(ts.replace(/\.ts$/, ".js")), ts);
   }
   assert.ok(existsSync(join(DIST, "page-probe.mjs")), "runner.js spawns page-probe.mjs from its own directory");
+  assert.ok(existsSync(join(DIST, "cli-shim.mjs")), "boundary.js hands checks cli-shim.mjs from its own directory");
   for (const f of files.filter((f) => f.endsWith(".js"))) {
     assert.doesNotMatch(readFileSync(join(DIST, f), "utf8"), /from "\.\.?\/[^"]*\.ts"/, f);
   }
