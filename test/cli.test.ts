@@ -156,7 +156,7 @@ test("init on an app it can't recognise says so instead of claiming it's ready",
   assert.equal(r.code, 0, r.stderr);
   assert.doesNotMatch(r.stdout, /Ready/);
   assert.doesNotMatch(r.stdout, /npm start/, "no made-up start command presented as the answer");
-  assert.match(r.stdout, /Not ready yet: set "start" in \.thisisfine\/config\.json/);
+  assert.match(r.stdout, /Not ready yet: nothing recognisable: set "start" or "cli" in \.thisisfine\/config\.json/);
   assert.match(r.stdout, /\{port\}/);
 
   // once the human has set it, init is happy
@@ -175,6 +175,31 @@ test("init writes the scaffold and reports what it detected", () => {
   assert.match(r.stdout, /Start command: npm start/);
   assert.match(r.stdout, /Not a git repository/);
   assert.match(readFileSync(join(root, ".thisisfine/package.json"), "utf8"), /"@playwright\/test": "1\.61\.0"/);
+});
+
+test("init on a Go cli reports the build and cli edges and writes the Go kit only", () => {
+  const root = tempDir();
+  put(root, "go.mod", "module example.com/tool\n\ngo 1.22\n");
+  put(root, "cmd/tool/main.go", "package main\nfunc main() {}\n");
+  const r = run(["init", "--no-install"], { cwd: root, home: join(root, "home") });
+  assert.equal(r.code, 0, r.stderr);
+  assert.match(r.stdout, /Build command: go build -o \.thisisfine\/bin\/tool\{exe\} \.\/cmd\/tool/);
+  assert.match(r.stdout, /CLI command: \{app\}\/\.thisisfine\/bin\/tool\{exe\}/);
+  assert.doesNotMatch(r.stdout, /Start command/);
+  assert.ok(existsSync(join(root, ".thisisfine/tif/tif.go")));
+  assert.ok(!existsSync(join(root, ".thisisfine/pytest.ini")));
+});
+
+test("propose refuses a check that imports the app instead of talking to it", () => {
+  const root = tempDir();
+  put(root, "pyproject.toml", "[project]\nname = \"shop\"\n");
+  put(root, "shop/__init__.py", "");
+  put(root, ".thisisfine/config.json", JSON.stringify({ start: "python -m shop {port}" }));
+  put(root, ".thisisfine/checks/1-cart.py", "from shop.cart import total\n\ndef test_total():\n    assert total([]) == 0\n");
+  const r = run(["propose", "--sentence", "an empty cart costs nothing", "--check", ".thisisfine/checks/1-cart.py"], { cwd: root, home: join(root, "home") });
+  assert.notEqual(r.code, 0);
+  assert.match(r.stderr, /from shop\.cart import total/);
+  assert.match(r.stderr, /from outside/);
 });
 
 // ── cross-machine verification ──────────────────────────────────────────

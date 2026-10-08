@@ -19,7 +19,7 @@ test("detects Next, Vite, dev and start scripts", () => {
   assert.equal(detectConfig(project({ scripts: { start: "node server.js" } })).config.start, "npm start");
   const none = detectConfig(tempDir());
   assert.equal(none.config.start, "npm start");
-  assert.match(none.detected, /edit/i);
+  assert.match(none.detected, /set "start" or "cli"/);
   assert.equal(none.known, false);
   assert.equal(detectConfig(project({ scripts: { start: "node server.js" } })).known, true);
 });
@@ -31,7 +31,7 @@ test("writeScaffold creates the committed files and pins Playwright", () => {
   const dir = join(root, ".thisisfine");
   assert.deepEqual(JSON.parse(readFileSync(join(dir, "config.json"), "utf8")).start, "npm start");
   assert.equal(JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).devDependencies["@playwright/test"], "1.61.0");
-  assert.equal(readFileSync(join(dir, ".gitignore"), "utf8"), "runs/\nnode_modules/\n", "state lives in the home dir, not here");
+  assert.match(readFileSync(join(dir, ".gitignore"), "utf8"), /^runs\/\nnode_modules\/\n/, "state lives in the home dir, not here");
   assert.match(readFileSync(join(dir, "playwright.config.mjs"), "utf8"), /THISISFINE_BASE_URL/);
   assert.ok(existsSync(join(dir, "checks")));
 });
@@ -80,4 +80,64 @@ test("the generated config gives each recorded check its own project behind its 
   assert.equal(one.testMatch.test("/p/.thisisfine/checks/11-badge.spec.ts"), false);
   assert.equal(one.testMatch.test("/p/.thisisfine/checks/1-badgeXspec.ts"), false);
   assert.equal(two.testMatch.test("/p/.thisisfine/checks/sub/2-logo.spec.ts"), true);
+});
+
+test("detects Go and Python edges, and a package bin", () => {
+  const goCli = tempDir();
+  put(goCli, "go.mod", "module example.com/tool\n\ngo 1.22\n");
+  put(goCli, "cmd/tool/main.go", "package main\nfunc main() {}\n");
+  const g = detectConfig(goCli).config;
+  assert.equal(g.build, "go build -o .thisisfine/bin/tool{exe} ./cmd/tool");
+  assert.equal(g.cli, "{app}/.thisisfine/bin/tool{exe}");
+  assert.equal(g.start, undefined);
+  const goRoot = tempDir();
+  put(goRoot, "go.mod", "module github.com/me/hello\n");
+  put(goRoot, "main.go", "package main\n");
+  assert.equal(detectConfig(goRoot).config.build, "go build -o .thisisfine/bin/hello{exe} .");
+
+  const flask = tempDir();
+  put(flask, "requirements.txt", "Flask==3.0\n");
+  assert.equal(detectConfig(flask).config.start, "python -m flask run --port {port}");
+  const django = tempDir();
+  put(django, "manage.py", "");
+  assert.match(detectConfig(django).config.start!, /runserver 127\.0\.0\.1:\{port\}/);
+  const script = tempDir();
+  put(script, "pyproject.toml", `[project]\nname = "csvkit2"\n\n[project.scripts]\ncsvtool = "csvkit2.cli:main"\n`);
+  assert.equal(detectConfig(script).config.cli, "csvtool");
+
+  assert.equal(detectConfig(project({ bin: { mytool: "bin/cli.js" } })).config.cli, "node bin/cli.js");
+  assert.equal(detectConfig(project({ dependencies: { next: "15" } })).config.cli, undefined);
+});
+
+test("loadConfig: start or cli, and both must be commands", () => {
+  const root = tempDir();
+  put(root, ".thisisfine/config.json", JSON.stringify({ cli: "node tool.js" }));
+  assert.equal(loadConfig(root).start, undefined);
+  put(root, ".thisisfine/config.json", JSON.stringify({ build: "make" }));
+  assert.throws(() => loadConfig(root), /"start".*"cli"/);
+  put(root, ".thisisfine/config.json", JSON.stringify({ cli: "node 'tool.js" }));
+  assert.throws(() => loadConfig(root), /unclosed quote/);
+  put(root, ".thisisfine/config.json", JSON.stringify({ start: "x", build: "" }));
+  assert.throws(() => loadConfig(root), /"build"/);
+});
+
+test("writeScaffold writes each language's kit only when the project uses it", () => {
+  const py = tempDir();
+  put(py, "pyproject.toml", "[project]\nname='x'\n");
+  writeScaffold(py, detectConfig(py).config);
+  const d = join(py, ".thisisfine");
+  assert.ok(existsSync(join(d, "tif.ts")));
+  assert.match(readFileSync(join(d, "thisisfine_check.py"), "utf8"), /def run\(/);
+  assert.match(readFileSync(join(d, "pytest.ini"), "utf8"), /python_files = \*\.py/);
+  assert.match(readFileSync(join(d, "requirements.txt"), "utf8"), /^pytest==/m);
+  assert.ok(!existsSync(join(d, "go.mod")));
+  assert.match(readFileSync(join(d, ".gitignore"), "utf8"), /^\.venv\/$/m);
+
+  const go = tempDir();
+  put(go, "go.mod", "module example.com/x\n");
+  writeScaffold(go, { cli: "x", ...DEFAULTS });
+  assert.match(readFileSync(join(go, ".thisisfine", "go.mod"), "utf8"), /^module thisisfine\.local\/checks$/m);
+  assert.doesNotMatch(readFileSync(join(go, ".thisisfine", "go.mod"), "utf8"), /^\s*(replace|require)\b/m);
+  assert.match(readFileSync(join(go, ".thisisfine", "tif", "tif.go"), "utf8"), /^package tif$/m);
+  assert.ok(!existsSync(join(go, ".thisisfine", "pytest.ini")));
 });

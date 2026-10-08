@@ -30,7 +30,10 @@ export function parseJunit(xml: string, check: string): CheckOutcome {
     const bad = /<(failure|error)\b([^>]*?)(?:\/>|>([\s\S]*?)<\/\1>)/.exec(body);
     if (bad) {
       const message = unescape(/\bmessage="([^"]*)"/.exec(bad[2]!)?.[1] ?? "");
-      const detail = unescape(bad[3] ?? "").trim();
+      let detail = unescape(bad[3] ?? "").replace(/\r\n/g, "\n").trim();
+      // a collection error's traceback is pytest's own import machinery; its `E` lines are the check's problem
+      const said = detail.split("\n").filter((l) => /^E\s/.test(l));
+      if (bad[1] === "error" && said.length) detail = said.join("\n");
       failures.push([`${name}: ${message}`.trim(), detail].filter(Boolean).join("\n"));
     } else if (/<skipped\b/.test(body)) {
       skipped++;

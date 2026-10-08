@@ -46,7 +46,8 @@ export type ProofMethod = (typeof PROOF_METHODS)[number];
 export interface Proof {
   proven: boolean;
   reason: string;
-  now: { screenshot: string | null };
+  /** `evidence` is the HTTP exchanges and cli runs the check made (root-relative); absent on older records. */
+  now: { screenshot: string | null; evidence?: string | null };
   without: {
     method: ProofMethod;
     ref: string | null;
@@ -55,6 +56,7 @@ export interface Proof {
     failed: boolean;
     message: string;
     screenshot: string | null;
+    evidence?: string | null;
   };
 }
 
@@ -119,9 +121,18 @@ export interface DismissRecord {
 export type LedgerRecord = ProposalRecord | LockRecord | RetireRecord | DismissRecord;
 export type SignedRecord = LockRecord | RetireRecord;
 
+/**
+ * The app's edges. At least one of `start` and `cli` is set. Commands may
+ * use `{app}` (the tree under test), `{exe}` (".exe" on Windows) and
+ * `{python}` (thisisfine's venv).
+ */
 export interface Config {
-  /** Shell command; `{port}` is substituted and PORT is also set. */
-  start: string;
+  /** The server. Shell command; `{port}` is substituted and PORT is also set. */
+  start?: string;
+  /** The command under test, run without a shell through the recording shim. */
+  cli?: string;
+  /** Shell command run once per tree before anything starts (e.g. `go build`). */
+  build?: string;
   readyPath: string;
   readyTimeoutMs: number;
   checkTimeoutMs: number;
