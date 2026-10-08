@@ -73,7 +73,8 @@ export const goRunner: ProcessRunner = {
     const dir = check.slice(`${STATE_DIR}/`.length, check.lastIndexOf("/"));
     return {
       file: "go",
-      args: ["test", "-json", "-count=1", `-timeout=${Math.ceil(timeoutMs / 1000)}s`, `./${dir}/`],
+      // the file, not the package: anything else dropped into the directory stays out of the locked check
+      args: ["test", "-json", "-count=1", `-timeout=${Math.ceil(timeoutMs / 1000)}s`, `./${dir}/check_test.go`],
       cwd: join(root, STATE_DIR),
       // a go.work in the repo must not pull the checks into the app's build, or the app into theirs
       env: { GOWORK: "off", GOFLAGS: "-mod=mod" }

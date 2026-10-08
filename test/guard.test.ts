@@ -142,3 +142,35 @@ test("Codex apply_patch: app code and new checks are fine, and so is text that o
 test("Codex apply_patch can't reach the home dir either", () => {
   assert.equal(guard("apply_patch", patch(`*** Add File: ${join(home, "state.json")}`, "+x")).deny, true);
 });
+
+test("a locked Go check is its whole directory; a sibling Go check and the build output stay free", () => {
+  const go = ".thisisfine/checks/3-dry-run/check_test.go";
+  const records: LedgerRecord[] = [
+    proposal({ id: "p3", number: 3, sentence: "--dry-run writes nothing", check: go }),
+    lock({ proposal: "p3", number: 3, sentence: "--dry-run writes nothing", check: go })
+  ];
+  for (const rel of [go, ".thisisfine/checks/3-dry-run/helper_test.go"]) {
+    const d = guard("Write", { file_path: p(rel) }, records);
+    assert.equal(d.deny, true, rel);
+    assert.match(d.reason, /#3/);
+  }
+  assert.equal(guard("Write", { file_path: p(".thisisfine/checks/4-help/check_test.go") }, records).deny, false);
+  assert.equal(guard("Write", { file_path: p(".thisisfine/tif/tif.go") }, records).deny, true, "the Go kit is setup");
+  assert.equal(guard("Write", { file_path: p(".thisisfine/thisisfine_check.py") }, records).deny, true, "so is the Python one");
+  assert.equal(guard("Write", { file_path: p(".thisisfine/bin/tool.exe") }, records).deny, false, "build output");
+
+  for (const command of [
+    "rm -rf .thisisfine/checks/3-dry-run",
+    "cd .thisisfine/checks && rm -r 3-dry-run",
+    "echo 'package checks' > .thisisfine/checks/3-dry-run/check_test.go"
+  ]) {
+    assert.equal(guard("Bash", { command }, records).deny, true, command);
+  }
+  for (const command of [
+    "mkdir -p .thisisfine/checks/4-help && cp /tmp/x.go .thisisfine/checks/4-help/check_test.go",
+    "rm 13-dry-run.txt",
+    "rm -rf .thisisfine/bin"
+  ]) {
+    assert.equal(guard("Bash", { command }, records).deny, false, command);
+  }
+});
