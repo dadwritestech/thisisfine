@@ -161,6 +161,8 @@ export interface RunOptions {
   screenshot?: "on" | "only-on-failure";
   /** check → recording proxy port: each check gets its own Playwright project behind it. */
   proxies?: Record<string, number>;
+  /** Extra environment for the checks: the cli shim (THISISFINE_CLI…), evidence paths. */
+  env?: Record<string, string>;
 }
 
 /**
@@ -168,7 +170,7 @@ export interface RunOptions {
  * already up at `baseUrl`. Playwright's exit code is ignored; the JSON
  * report is the only source of truth.
  */
-export async function runChecks(opts: RunOptions): Promise<CheckOutcome[]> {
+export async function runPlaywright(opts: RunOptions): Promise<CheckOutcome[]> {
   const cli = playwrightCli(opts.root);
   if (!existsSync(cli)) {
     throw new Error(`Playwright isn't installed for thisisfine yet. Run "thisisfine init" (or "npm install" inside ${STATE_DIR}/).`);
@@ -186,6 +188,7 @@ export async function runChecks(opts: RunOptions): Promise<CheckOutcome[]> {
       windowsHide: true,
       env: {
         ...process.env,
+        ...opts.env,
         THISISFINE_BASE_URL: opts.baseUrl,
         THISISFINE_REPORT: reportPath,
         THISISFINE_OUTPUT_DIR: join(opts.runDir, "artifacts"),

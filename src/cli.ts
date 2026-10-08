@@ -24,7 +24,8 @@ import { diffText, nestedContext, pendingMessage, proofLine, sessionContext, sho
 import { restoredLedger } from "./restore.ts";
 import { startRecorder } from "./recorder.ts";
 import type { Recorder } from "./recorder.ts";
-import { pageErrors, runChecks, withoutLoadErrors } from "./runner.ts";
+import { pageErrors, withoutLoadErrors } from "./runner.ts";
+import { runChecks } from "./runners.ts";
 import { buildCoverage, usesOwnHttp } from "./select.ts";
 import { buildKeyring, KEYS_DIR, publishPublicKey, readPublicKeys } from "./keys.ts";
 import { checkSignature, homeDir, loadOrCreateSigner, loadSigner } from "./sign.ts";

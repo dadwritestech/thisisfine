@@ -5,7 +5,7 @@ import * as gitOps from "./git.ts";
 import { startApp } from "./launcher.ts";
 import type { RunningApp, StartOptions } from "./launcher.ts";
 import { browserLaunchError, browserText } from "./render.ts";
-import { runChecks } from "./runner.ts";
+import { runChecks } from "./runners.ts";
 import type { RunOptions } from "./runner.ts";
 import type { CheckOutcome, Config, Proof } from "./types.ts";
 
