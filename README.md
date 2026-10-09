@@ -217,6 +217,14 @@ See [integrations/pi](integrations/pi/README.md) and [integrations/codex](integr
 
 Three slash commands: `/promise <sentence>`, `/promises` (list them), `/retire <n> <why>`.
 
+### What it runs, and what it sends
+
+- **The hooks run on your machine:** `node bin/thisisfine.mjs` from the plugin folder. There's no telemetry, and thisisfine has no server of its own to talk to.
+- **Downloads happen once, at setup** (the first `/promise`, or `thisisfine init`), and only into `.thisisfine/`: `@playwright/test` from the npm registry and Chromium through Playwright's installer for a web app, and pytest and requests from PyPI for Python, all at pinned versions. Go checks use your own `go` toolchain and need no modules.
+- **Your app stays local.** Proofs and checks start it on a free localhost port. API and CLI checks go through a recorder on 127.0.0.1, so the evidence can show what was sent and what came back. It keeps no headers.
+- **Files:** it writes inside `.thisisfine/` in your repo, plus your signing key in `~/.thisisfine/` (or `$THISISFINE_HOME`). The guard hook stops Claude from touching that key folder.
+- **The GitHub Action**, if you add it, posts one pull request comment using the token you give it.
+
 ## For vibecoders
 
 You don't need to know what a test is. You say "perfect" when something works, and Claude asks if you want to lock it in. From then on, if Claude breaks it, Claude finds out before you do, and has to fix it before it's allowed to say it's done. The messages are in plain English and quote what you said.
