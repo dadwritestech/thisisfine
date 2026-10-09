@@ -7,6 +7,9 @@
   },
   "homepage": "https://dadwritestech.github.io/thisisfine/",
   "repository": "https://github.com/dadwritestech/thisisfine",
+  "documentationUrl": "https://github.com/dadwritestech/thisisfine#readme",
+  "supportUrl": "https://github.com/dadwritestech/thisisfine/issues",
+  "privacyPolicyUrl": "https://dadwritestech.github.io/thisisfine/privacy.html",
   "license": "MIT",
   "keywords": ["regressions", "playwright", "pytest", "golang", "hooks", "testing", "api-testing", "cli", "guardrails"]
 }

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy · thisisfine</title>
+<meta name="description" content="What the thisisfine plugin reads, stores and sends. Short version: nothing leaves your machine, and there is no thisisfine server.">
+<link rel="canonical" href="https://dadwritestech.github.io/thisisfine/privacy.html">
+<meta name="theme-color" content="#2b1d12">
+<link rel="icon" href="img/favicon.svg" type="image/svg+xml">
+<style>
+  :root { --bg: #1d130b; --cream: #fff8ef; --muted: #d8c8b4; --dim: #a8927a; --amber: #ffb347; --line: rgba(255, 248, 239, .12); }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--cream); font: 17px/1.65 Inter, system-ui, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+  main { width: min(760px, 100% - 40px); margin: 0 auto; padding: 56px 0 72px; }
+  a { color: var(--amber); }
+  h1 { font-size: 40px; line-height: 1.1; margin: 0 0 6px; letter-spacing: -0.5px; }
+  h2 { font-size: 22px; margin: 40px 0 8px; }
+  .is { color: var(--amber); }
+  .meta { color: var(--dim); font-size: 14px; margin: 0 0 28px; }
+  .short { border-left: 3px solid var(--amber); padding: 10px 18px; background: #2b1d12; border-radius: 0 10px 10px 0; }
+  li { margin: 6px 0; color: var(--muted); }
+  li b, p b { color: var(--cream); }
+  code { font: 15px ui-monospace, Consolas, monospace; background: #2b1d12; padding: 1px 6px; border-radius: 5px; }
+  footer { border-top: 1px solid var(--line); margin-top: 48px; padding-top: 20px; color: var(--dim); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <p><a href="./">← this<span class="is">is</span>fine</a></p>
+  <h1>Privacy</h1>
+  <p class="meta">Applies to the thisisfine plugin for Claude Code, Codex and pi, the npm package, and the GitHub Action. Last updated 9 October 2026.</p>
+
+  <p class="short"><b>Short version:</b> thisisfine has no server. It collects nothing, sends nothing to its author, and has no telemetry. Everything it writes stays on your machine or in your own repository.</p>
+
+  <h2>What it reads</h2>
+  <ul>
+    <li><b>Your prompts, as they're submitted.</b> A hook looks at each prompt to tell whether you're answering "y" to a promise. It doesn't store or send the prompt anywhere.</li>
+    <li><b>Your agent's transcript file</b>, on your machine, to confirm that a "y" was typed by you and not by the agent.</li>
+    <li><b>Your code and your app's responses</b>, locally, while it runs your checks.</li>
+  </ul>
+
+  <h2>What it stores, and where</h2>
+  <ul>
+    <li><b>In your repository, under <code>.thisisfine/</code>:</b> the promise sentences, the checks, and a signed record of each "y". That record includes the words you typed, a session id, and the path to the agent's transcript file. That path usually contains your OS username. These files are meant to be committed, so if your repository is public, they are too.</li>
+    <li><b>Proof runs, under <code>.thisisfine/runs/</code>:</b> screenshots and the HTTP exchanges and command runs a check made, including request and response bodies, but no headers. This folder is gitignored.</li>
+    <li><b>In your home folder, under <code>~/.thisisfine/</code></b> (or <code>$THISISFINE_HOME</code>): your signing key, and a backup copy of your signed records and locked checks, so a lock can't vanish with a <code>git checkout</code>.</li>
+  </ul>
+  <p>All of it is kept until you delete it.</p>
+
+  <h2>What goes over the network</h2>
+  <ul>
+    <li><b>Setup downloads, once.</b> The first time you set it up, it installs pinned versions of <code>@playwright/test</code> from the npm registry and Chromium through Playwright's installer (for web apps), or pytest and requests from PyPI (for Python). Those services see an ordinary download request. No data about you or your code goes with it. Go checks use your own toolchain and download nothing.</li>
+    <li><b>Your app stays on your machine.</b> Checks start it on a localhost port, and the recorder listens only on 127.0.0.1.</li>
+    <li><b>The GitHub Action</b>, if you add it to a workflow, runs on GitHub's runners and posts one comment on the pull request, using the token you give it.</li>
+  </ul>
+
+  <h2>Children</h2>
+  <p>thisisfine is a developer tool and isn't directed at children.</p>
+
+  <h2>This website</h2>
+  <p>The site is hosted on GitHub Pages, so GitHub handles your visit under <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">its own privacy statement</a>. The home page loads its fonts from Google Fonts. The site has no analytics and sets no cookies of its own.</p>
+
+  <h2>Changes and contact</h2>
+  <p>Changes to this page are visible in the <a href="https://github.com/dadwritestech/thisisfine/commits/main/site/privacy.html">repository history</a>. Questions go to the <a href="https://github.com/dadwritestech/thisisfine/issues">issue tracker</a>.</p>
+
+  <footer>this<span class="is">is</span>fine · MIT · by <a href="https://github.com/dadwritestech">dadwritestech</a></footer>
+</main>
+</body>
+</html>

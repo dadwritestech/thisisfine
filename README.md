@@ -225,6 +225,8 @@ Three slash commands: `/promise <sentence>`, `/promises` (list them), `/retire <
 - **Files:** it writes inside `.thisisfine/` in your repo, plus your signing key in `~/.thisisfine/` (or `$THISISFINE_HOME`). The guard hook stops Claude from touching that key folder.
 - **The GitHub Action**, if you add it, posts one pull request comment using the token you give it.
 
+The full [privacy page](https://dadwritestech.github.io/thisisfine/privacy.html) also covers what the records keep.
+
 ## For vibecoders
 
 You don't need to know what a test is. You say "perfect" when something works, and Claude asks if you want to lock it in. From then on, if Claude breaks it, Claude finds out before you do, and has to fix it before it's allowed to say it's done. The messages are in plain English and quote what you said.
