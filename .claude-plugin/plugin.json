@@ -5,8 +5,8 @@
   "author": {
     "name": "dadwritestech"
   },
-  "homepage": "https://github.com/dadwritestech/thisisfine",
+  "homepage": "https://dadwritestech.github.io/thisisfine/",
   "repository": "https://github.com/dadwritestech/thisisfine",
   "license": "MIT",
-  "keywords": ["regressions", "playwright", "hooks", "testing", "vibe-coding", "guardrails"]
+  "keywords": ["regressions", "playwright", "pytest", "golang", "hooks", "testing", "api-testing", "cli", "guardrails"]
 }
