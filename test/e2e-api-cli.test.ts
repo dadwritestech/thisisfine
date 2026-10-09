@@ -104,9 +104,13 @@ test("Python API: an expired token gets a 401, proven by sabotage, locked, then 
   const without = propose.stdout.slice(propose.stdout.indexOf("Evidence without"));
   assert.equal(without.match(/GET \/me/g)?.length, 2, "one attempt's two requests, not a retry's too");
 
-  assert.match(say("y", "pr-yes").stdout, /locked/i);
+  const yes = say("y", "pr-yes");
+  assert.match(yes.stdout, /locked/i);
+  keep("api-locked.json", yes.stdout);
   commitAll(root, "promise #1");
-  assert.notEqual(hook("hook-stop").json().decision, "block");
+  const fine = hook("hook-stop");
+  assert.notEqual(fine.json().decision, "block");
+  keep("api-stop-fine.json", fine.stdout);
 
   // "Tidy up the auth code": the expiry check goes missing.
   edit("app.py", EXPIRY_FIX, EXPIRY);
@@ -114,8 +118,15 @@ test("Python API: an expired token gets a 401, proven by sabotage, locked, then 
   assert.equal(broken.decision, "block", JSON.stringify(broken));
   assert.match(broken.reason, /#1/);
   keep("api-stop-broken.txt", broken.reason);
+  keep("api-stop-broken.json", JSON.stringify(broken));
   assert.match(broken.reason, /test_an_expired_token_gets_a_401/);
   assert.match(broken.reason, /assert 200 == 401/);
+
+  // Sent back, the agent puts the expiry check back, and the turn can end.
+  edit("app.py", EXPIRY, EXPIRY_FIX);
+  const fixed = hook("hook-stop");
+  assert.notEqual(fixed.json().decision, "block");
+  keep("api-stop-fixed.json", fixed.stdout);
 });
 
 const DRY_RUN = `		note := strings.Join(words, " ")\n`;

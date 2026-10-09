@@ -173,6 +173,7 @@
     pin(index) { pinned = index === null ? null : term.children[index]; scroll(); },
     clear() { term.textContent = ""; pinned = null; },
     caption(html) { $("caption").innerHTML = html; },
+    title(text) { document.querySelector(".bar .title").textContent = text; },
     scene(id, flames) {
       for (const s of document.querySelectorAll(".scene")) s.classList.toggle("on", s.id === id);
       $("flames").style.display = flames ? "" : "none";

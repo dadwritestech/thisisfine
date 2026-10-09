@@ -123,6 +123,10 @@ Not everything you say "perfect" to is on a web page. A promise can be about an 
 | An HTTP API, in Python | `.thisisfine/checks/4-expired-token.py` | pytest, in thisisfine's own venv |
 | A CLI, in Go | `.thisisfine/checks/5-dry-run/check_test.go` | `go test`, in thisisfine's own module |
 
+<p align="center">
+  <img src="docs/img/demo-api.gif" alt="Demo, recorded from a real end-to-end run of the Python API example. You report that expired tokens still get into GET /me; Claude adds the expiry check and asks thisisfine to prove it with a patch that undoes the fix. thisisfine shows the evidence: with the fix, GET /me returns 401 'token expired'; without it, 200 with alice's account. You reply 'y' and promise #1 is locked. Weeks later a 'tidy up the auth code' request deletes the expiry check; Claude tries to stop and is blocked with '🔥 This is NOT fine', assert 200 == 401. Claude puts the check back and the turn ends with '☕ This is fine. 1/1 promises kept.'" width="100%">
+</p>
+
 JS/TS projects can promise API and CLI behaviour from a `.spec.ts` too, through the `request` and `run` fixtures. Whatever the language, the check is still black-box: it calls your API over HTTP or runs your CLI as a process, and a check that imports your code is refused. `init` detects Next.js, Vite, npm scripts, a package `bin`, Go's `cmd/<name>`, Django, Flask and FastAPI. `.thisisfine/config.json` has up to three commands: `start` (a server), `cli` (what checks run), and `build` (runs before either, in both the real tree and the proof's).
 
 A check that drives no browser has no screenshot, so thisisfine records what it sent and what came back instead, and shows you both sides before you say yes. This is the [Python API example](examples/tiny-api-py), from the [end-to-end test](test/e2e-api-cli.test.ts):
@@ -346,6 +350,8 @@ The demo GIF at the top is filmed from that run: every line of thisisfine output
 ```bash
 npm run demo
 ```
+
+The API demo in [APIs and CLIs](#apis-and-clis) is filmed the same way, from the Python API run (`npm run demo:api`, needs Python 3.9+).
 
 ## License
 

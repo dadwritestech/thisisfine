@@ -50,7 +50,8 @@
     "test": "node --test \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "test:e2e": "node --test test/e2e.test.ts test/e2e-api-cli.test.ts",
-    "demo": "node scripts/demo/build.ts"
+    "demo": "node scripts/demo/build.ts",
+    "demo:api": "node scripts/demo/build-api.ts"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
